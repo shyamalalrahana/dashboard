@@ -1,6 +1,0 @@
-name = "business-vitality-dashboard"
-compatibility_date = "2024-01-01"
-pages_build_output_dir = "dist/client"
-
-[build]
-command = "bun run build && cp dist/server/server.js dist/client/_worker.js"

@@ -10,6 +10,7 @@ import {
   Leaf,
   FlaskConical,
   Package,
+  UserCog,
 } from "lucide-react";
 
 import {
@@ -35,6 +36,7 @@ const main = [
 ];
 
 const ops = [
+  { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Batches", url: "/batches", icon: FlaskConical },
   { title: "Reports", url: "/reports", icon: FileBarChart },
   { title: "Settings", url: "/settings", icon: Settings },

@@ -141,15 +141,11 @@ export function StaffPage() {
   const [form, setForm] = useState({ name: "", phone: "", email: "", role: "cashier", salary: "", joinDate: "", status: "Active" as Staff["status"] });
 
   // Confirmation modal
-  const [confirmDelete, setConfirmDelete] = useState<{ type: "staff"; id: string; label: string } | { type: "role"; id: string; label: string } | { type: "section"; key: string; label: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: "staff"; id: string; label: string } | { type: "role"; id: string; label: string } | null>(null);
 
   // Add/Edit Role dialog
-  const [addRoleOpen, setAddRoleOpen] = useState(false);
+  const [roleDialog, setRoleDialog] = useState<{ mode: "add" | "edit"; id?: string } | null>(null);
   const [roleForm, setRoleForm] = useState({ name: "", color: "bg-blue-500" });
-
-  // Add/Edit Section dialog
-  const [sectionDialog, setSectionDialog] = useState<{ mode: "add" | "edit"; key?: string } | null>(null);
-  const [sectionForm, setSectionForm] = useState({ label: "", description: "" });
 
   const COLOR_OPTIONS = [
     { label: "Blue", value: "bg-blue-500" },
@@ -204,67 +200,38 @@ export function StaffPage() {
       toast.success("Staff removed", { description: confirmDelete.label });
     } else if (confirmDelete.type === "role") {
       setStaff(staff.map((s) => s.role === confirmDelete.id ? { ...s, role: "cashier" } : s));
-      setRoles(roles.filter((r) => r.id !== confirmDelete.id));
-      if (selectedRole.id === confirmDelete.id) setSelectedRole(roles.find((r) => r.id !== confirmDelete.id) ?? roles[0]);
+      const remaining = roles.filter((r) => r.id !== confirmDelete.id);
+      setRoles(remaining);
+      if (selectedRole.id === confirmDelete.id) setSelectedRole(remaining[0]);
       toast.success("Role deleted", { description: confirmDelete.label });
-    } else if (confirmDelete.type === "section") {
-      setSections(sections.filter((s) => s.key !== confirmDelete.key));
-      setRoles(roles.map((r) => {
-        const p = { ...r.permissions };
-        delete p[confirmDelete.key];
-        return { ...r, permissions: p };
-      }));
-      toast.success("Section deleted", { description: confirmDelete.label });
     }
     setConfirmDelete(null);
   }
 
-  function handleAddRole() {
-    if (!roleForm.name.trim()) return;
-    const id = roleForm.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
-    const newRole: Role = {
-      id,
-      name: roleForm.name.trim(),
-      color: roleForm.color,
-      permissions: defaultPermissions(["dashboard"]),
-    };
-    setRoles([...roles, newRole]);
-    setSelectedRole(newRole);
-    setTab("roles");
+  function openAddRole() {
     setRoleForm({ name: "", color: "bg-blue-500" });
-    setAddRoleOpen(false);
-    toast.success("Role created", { description: `${newRole.name} · configure its sections now` });
+    setRoleDialog({ mode: "add" });
   }
 
-  function openAddSection() {
-    setSectionForm({ label: "", description: "" });
-    setSectionDialog({ mode: "add" });
+  function openEditRole(role: Role) {
+    setRoleForm({ name: role.name, color: role.color });
+    setRoleDialog({ mode: "edit", id: role.id });
   }
 
-  function openEditSection(sec: Section) {
-    setSectionForm({ label: sec.label, description: sec.description });
-    setSectionDialog({ mode: "edit", key: sec.key });
-  }
-
-  function handleSaveSection() {
-    if (!sectionForm.label.trim()) return;
-    if (sectionDialog?.mode === "add") {
-      const key = sectionForm.label.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
-      const newSec: Section = { key, label: sectionForm.label.trim(), description: sectionForm.description.trim(), builtIn: false };
-      setSections([...sections, newSec]);
-      // add the key to all roles' permissions (default off)
-      setRoles(roles.map((r) => ({ ...r, permissions: { ...r.permissions, [key]: false } })));
-      toast.success("Section added", { description: newSec.label });
-    } else if (sectionDialog?.mode === "edit" && sectionDialog.key) {
-      setSections(sections.map((s) => s.key === sectionDialog.key ? { ...s, label: sectionForm.label.trim(), description: sectionForm.description.trim() } : s));
-      toast.success("Section updated");
+  function handleSaveRole() {
+    if (!roleForm.name.trim()) return;
+    if (roleDialog?.mode === "add") {
+      const id = roleForm.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+      const newRole: Role = { id, name: roleForm.name.trim(), color: roleForm.color, permissions: defaultPermissions(["dashboard"]) };
+      setRoles([...roles, newRole]);
+      setSelectedRole(newRole);
+      toast.success("Role created", { description: newRole.name });
+    } else if (roleDialog?.mode === "edit" && roleDialog.id) {
+      setRoles(roles.map((r) => r.id === roleDialog.id ? { ...r, name: roleForm.name.trim(), color: roleForm.color } : r));
+      if (selectedRole.id === roleDialog.id) setSelectedRole((prev) => ({ ...prev, name: roleForm.name.trim(), color: roleForm.color }));
+      toast.success("Role updated");
     }
-    setSectionDialog(null);
-  }
-
-  function handleDeleteSection(key: string) {
-    const sec = sections.find((s) => s.key === key);
-    if (sec) setConfirmDelete({ type: "section", key, label: sec.label });
+    setRoleDialog(null);
   }
 
   function togglePermission(roleId: string, section: string) {
@@ -293,7 +260,7 @@ export function StaffPage() {
             <Plus className="h-4 w-4" /> Add Staff
           </Button>
         ) : (
-          <Button size="sm" className="gap-1.5" onClick={() => setAddRoleOpen(true)}>
+          <Button size="sm" className="gap-1.5" onClick={openAddRole}>
             <Plus className="h-4 w-4" /> Add Role
           </Button>
         )
@@ -403,11 +370,11 @@ export function StaffPage() {
                 {roles.map((role) => {
                   const count = staff.filter((s) => s.role === role.id).length;
                   const perms = Object.values(role.permissions).filter(Boolean).length;
-                  const isBuiltIn = ["owner", "manager", "cashier", "inventory_staff", "accountant"].includes(role.id);
+                  const isOwner = role.id === "owner";
                   return (
                     <div
                       key={role.id}
-                      className={`flex items-center gap-3 p-4 transition-colors hover:bg-muted/40 ${selectedRole.id === role.id ? "bg-muted/60" : ""}`}
+                      className={`flex items-center gap-2 px-4 py-3 transition-colors hover:bg-muted/40 ${selectedRole.id === role.id ? "bg-muted/60" : ""}`}
                     >
                       <button
                         className="flex items-center gap-3 flex-1 min-w-0 text-left"
@@ -418,19 +385,25 @@ export function StaffPage() {
                           <p className="text-sm font-medium">{role.name}</p>
                           <p className="text-xs text-muted-foreground">{count} staff · {perms}/{sections.length} sections</p>
                         </div>
-                        {selectedRole.id === role.id && (
-                          <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
-                        )}
                       </button>
-                      {!isBuiltIn && (
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => handleRemoveRole(role.id)}
-                          className="ml-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title="Delete role"
+                          onClick={() => openEditRole(role)}
+                          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          title="Edit role"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </button>
-                      )}
+                        {!isOwner && (
+                          <button
+                            onClick={() => handleRemoveRole(role.id)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Delete role"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -441,51 +414,28 @@ export function StaffPage() {
           {/* Permissions panel */}
           <Card className="lg:col-span-2">
             <CardContent className="p-0">
-              <div className="border-b border-border p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={`h-3 w-3 rounded-full ${selectedRole.color}`} />
-                  <div>
-                    <h2 className="font-display text-base font-semibold">{selectedRole.name}</h2>
-                    <p className="text-xs text-muted-foreground">Toggle sections this role can access</p>
-                  </div>
+              <div className="border-b border-border p-4 flex items-center gap-3">
+                <span className={`h-3 w-3 rounded-full ${selectedRole.color}`} />
+                <div>
+                  <h2 className="font-display text-base font-semibold">{selectedRole.name}</h2>
+                  <p className="text-xs text-muted-foreground">Toggle sections this role can access</p>
                 </div>
-                <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={openAddSection}>
-                  <Plus className="h-3.5 w-3.5" /> Add Section
-                </Button>
               </div>
               <div className="divide-y divide-border">
                 {sections.map((section) => {
                   const allowed = roles.find((r) => r.id === selectedRole.id)?.permissions[section.key] ?? false;
                   const isOwner = selectedRole.id === "owner";
                   return (
-                    <div key={section.key} className="flex items-center gap-4 px-6 py-3.5">
-                      <div className="flex-1 min-w-0">
+                    <div key={section.key} className="flex items-center justify-between px-6 py-4">
+                      <div>
                         <p className="text-sm font-medium">{section.label}</p>
                         <p className="text-xs text-muted-foreground">{section.description}</p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Switch
-                          checked={allowed}
-                          disabled={isOwner}
-                          onCheckedChange={() => togglePermission(selectedRole.id, section.key)}
-                        />
-                        <button
-                          onClick={() => openEditSection(section)}
-                          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                          title="Edit section"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        {!section.builtIn && (
-                          <button
-                            onClick={() => handleDeleteSection(section.key)}
-                            className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            title="Delete section"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      <Switch
+                        checked={allowed}
+                        disabled={isOwner}
+                        onCheckedChange={() => togglePermission(selectedRole.id, section.key)}
+                      />
                     </div>
                   );
                 })}
@@ -505,65 +455,30 @@ export function StaffPage() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {confirmDelete?.type === "staff" ? "Remove Staff Member?" : confirmDelete?.type === "role" ? "Delete Role?" : "Delete Section?"}
+              {confirmDelete?.type === "staff" ? "Remove Staff Member?" : "Delete Role?"}
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 text-sm text-muted-foreground">
             {confirmDelete?.type === "staff" ? (
               <>Are you sure you want to remove <span className="font-semibold text-foreground">{confirmDelete.label}</span> from your team? This cannot be undone.</>
-            ) : confirmDelete?.type === "role" ? (
-              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete.label}</span> role? Staff assigned to this role will be moved to Cashier.</>
             ) : (
-              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete?.label}</span> section? It will be removed from all roles.</>
+              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete?.label}</span> role? Staff assigned to this role will be moved to Cashier.</>
             )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              {confirmDelete?.type === "staff" ? "Remove" : "Delete"}
+              {confirmDelete?.type === "staff" ? "Remove" : "Delete Role"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── ADD / EDIT SECTION DIALOG ── */}
-      <Dialog open={!!sectionDialog} onOpenChange={(o) => !o && setSectionDialog(null)}>
+      {/* ── ADD / EDIT ROLE DIALOG ── */}
+      <Dialog open={!!roleDialog} onOpenChange={(o) => !o && setRoleDialog(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{sectionDialog?.mode === "add" ? "Add Section" : "Edit Section"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Section Name</Label>
-              <Input
-                placeholder="e.g. Purchase Orders"
-                value={sectionForm.label}
-                onChange={(e) => setSectionForm({ ...sectionForm, label: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description <span className="text-muted-foreground">(optional)</span></Label>
-              <Input
-                placeholder="e.g. Manage supplier purchase orders"
-                value={sectionForm.description}
-                onChange={(e) => setSectionForm({ ...sectionForm, description: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSectionDialog(null)}>Cancel</Button>
-            <Button onClick={handleSaveSection} disabled={!sectionForm.label.trim()}>
-              {sectionDialog?.mode === "add" ? "Add Section" : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── ADD ROLE DIALOG ── */}
-      <Dialog open={addRoleOpen} onOpenChange={setAddRoleOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Add New Role</DialogTitle>
+            <DialogTitle>{roleDialog?.mode === "add" ? "Add New Role" : "Edit Role"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -596,9 +511,9 @@ export function StaffPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddRoleOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddRole} disabled={!roleForm.name.trim()}>
-              Create Role
+            <Button variant="outline" onClick={() => setRoleDialog(null)}>Cancel</Button>
+            <Button onClick={handleSaveRole} disabled={!roleForm.name.trim()}>
+              {roleDialog?.mode === "add" ? "Create Role" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

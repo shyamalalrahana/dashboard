@@ -9,6 +9,7 @@ import {
   Settings,
   Leaf,
   FlaskConical,
+  Package,
 } from "lucide-react";
 
 import {
@@ -28,6 +29,7 @@ const main = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Sales", url: "/sales", icon: ShoppingCart },
   { title: "Expenses", url: "/expenses", icon: Receipt },
+  { title: "Products", url: "/products", icon: Package },
   { title: "Inventory", url: "/inventory", icon: Boxes },
   { title: "Customers", url: "/customers", icon: Users },
 ];

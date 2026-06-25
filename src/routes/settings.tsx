@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
-      { title: "Settings · Vaidya Ayur ERP" },
+      { title: "Settings · ShopOS" },
       { name: "description", content: "Business profile, tax and notification settings." },
     ],
   }),
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const [profile, setProfile] = useState({
-    name: "Vaidya Ayur Manufacturing",
+    name: "My Business",
     gst: "27ABCDE1234F1Z5",
     address: "Plot 14, MIDC, Pune 411019",
     phone: "+91 20 2712 4500",
@@ -54,7 +54,7 @@ function SettingsPage() {
         <CardContent className="space-y-8 p-6">
 
           {/* Business profile */}
-          <Section title="Business profile" description="Your manufacturing unit's legal and contact details.">
+          <Section title="Business profile" description="Your shop's legal and contact details.">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field
                 id="biz"

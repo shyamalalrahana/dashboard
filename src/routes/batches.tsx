@@ -36,7 +36,7 @@ import { batches as initialBatches, topProducts } from "@/lib/mock-data";
 export const Route = createFileRoute("/batches")({
   head: () => ({
     meta: [
-      { title: "Batches · Vaidya Ayur ERP" },
+      { title: "Batches · ShopOS" },
       { name: "description", content: "Manufacturing batches with expiry tracking." },
     ],
   }),

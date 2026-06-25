@@ -36,7 +36,7 @@ import { customers, fmtINR, recentSales as initialSales, salesOverview, topProdu
 export const Route = createFileRoute("/sales")({
   head: () => ({
     meta: [
-      { title: "Sales · Vaidya Ayur ERP" },
+      { title: "Sales · ShopOS" },
       { name: "description", content: "Manage sales entries, invoices and customers." },
     ],
   }),

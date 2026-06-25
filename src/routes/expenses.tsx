@@ -36,7 +36,7 @@ import { expenseBreakdown, fmtINR, recentExpenses as initialExpenses } from "@/l
 export const Route = createFileRoute("/expenses")({
   head: () => ({
     meta: [
-      { title: "Expenses · Vaidya Ayur ERP" },
+      { title: "Expenses · ShopOS" },
       { name: "description", content: "Track and categorize unit expenses." },
     ],
   }),

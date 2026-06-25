@@ -72,11 +72,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Vaidya · Ayurvedic Manufacturing ERP" },
+      { title: "ShopOS · Multi-Shop ERP" },
       {
         name: "description",
         content:
-          "Run your Ayurvedic manufacturing unit — sales, expenses, inventory, batches, and profit at a glance.",
+          "Run your shop — sales, expenses, inventory, batches, and profit at a glance.",
       },
     ],
     links: [

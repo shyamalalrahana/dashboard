@@ -52,8 +52,8 @@ export function AppSidebar() {
             <Leaf className="h-5 w-5" />
           </div>
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-semibold tracking-tight">Vaidya</span>
-            <span className="text-[11px] text-sidebar-foreground/60">Ayur Manufacturing</span>
+            <span className="text-sm font-semibold tracking-tight">ShopOS</span>
+            <span className="text-[11px] text-sidebar-foreground/60">My Business</span>
           </div>
         </div>
       </SidebarHeader>

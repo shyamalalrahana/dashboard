@@ -35,7 +35,7 @@ import {
 export const Route = createFileRoute("/products")({
   head: () => ({
     meta: [
-      { title: "Products · Vaidya Ayur ERP" },
+      { title: "Products · ShopOS" },
       { name: "description", content: "Product catalogue with pricing and expiry tracking." },
     ],
   }),
@@ -56,15 +56,15 @@ type Product = {
 };
 
 const initialProducts: Product[] = [
-  { id: "PRD-001", name: "Brahmi Churna 100g", category: "Churna", sku: "BC-100", mrp: 180, costPrice: 85, qty: 240, unit: "pkt", expiryDate: "2026-12-31", status: "Active" },
-  { id: "PRD-002", name: "Ashwagandha Capsules 60s", category: "Capsules", sku: "AWC-60", mrp: 350, costPrice: 140, qty: 180, unit: "box", expiryDate: "2027-03-31", status: "Active" },
-  { id: "PRD-003", name: "Triphala Tablets 120s", category: "Tablets", sku: "TT-120", mrp: 220, costPrice: 90, qty: 320, unit: "strip", expiryDate: "2026-09-30", status: "Active" },
-  { id: "PRD-004", name: "Neem Oil 100ml", category: "Oil", sku: "NO-100", mrp: 130, costPrice: 55, qty: 90, unit: "btl", expiryDate: "2026-06-30", status: "Active" },
-  { id: "PRD-005", name: "Chyawanprash 500g", category: "Lehyam", sku: "CP-500", mrp: 450, costPrice: 195, qty: 60, unit: "jar", expiryDate: "2025-12-31", status: "Inactive" },
-  { id: "PRD-006", name: "Arjuna Bark Powder 200g", category: "Churna", sku: "ABP-200", mrp: 160, costPrice: 70, qty: 0, unit: "pkt", expiryDate: "2027-06-30", status: "Discontinued" },
+  { id: "PRD-001", name: "Sunflower Oil 1L", category: "Grocery", sku: "SOL-001", mrp: 180, costPrice: 140, qty: 240, unit: "btl", expiryDate: "2026-12-31", status: "Active" },
+  { id: "PRD-002", name: "Basmati Rice 5kg", category: "Grocery", sku: "BRS-005", mrp: 480, costPrice: 360, qty: 180, unit: "bag", expiryDate: "2027-03-31", status: "Active" },
+  { id: "PRD-003", name: "Wheat Flour 10kg", category: "Grocery", sku: "WFL-010", mrp: 380, costPrice: 290, qty: 320, unit: "bag", expiryDate: "2026-09-30", status: "Active" },
+  { id: "PRD-004", name: "Shampoo 200ml", category: "Personal Care", sku: "SHP-200", mrp: 130, costPrice: 75, qty: 90, unit: "btl", expiryDate: "2026-06-30", status: "Active" },
+  { id: "PRD-005", name: "Detergent Powder 1kg", category: "Household", sku: "DTP-001", mrp: 110, costPrice: 65, qty: 60, unit: "pkt", expiryDate: "2027-06-30", status: "Active" },
+  { id: "PRD-006", name: "Toor Dal 1kg", category: "Grocery", sku: "TDL-001", mrp: 160, costPrice: 120, qty: 0, unit: "pkt", expiryDate: "2025-12-31", status: "Discontinued" },
 ];
 
-const CATEGORIES = ["Churna", "Capsules", "Tablets", "Oil", "Lehyam", "Syrup", "Kwath", "Other"];
+const CATEGORIES = ["Grocery", "Personal Care", "Household", "Beverages", "Snacks", "Dairy", "Electronics", "Other"];
 
 function expiryStatus(dateStr: string) {
   const exp = new Date(dateStr);
@@ -83,7 +83,7 @@ export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
-    name: "", category: "Churna", sku: "", mrp: "", costPrice: "",
+    name: "", category: "Grocery", sku: "", mrp: "", costPrice: "",
     qty: "", unit: "pkt", expiryDate: "", status: "Active" as Product["status"],
   });
 
@@ -106,7 +106,7 @@ export function ProductsPage() {
       status: form.status,
     };
     setProducts([next, ...products]);
-    setForm({ name: "", category: "Churna", sku: "", mrp: "", costPrice: "", qty: "", unit: "pkt", expiryDate: "", status: "Active" });
+    setForm({ name: "", category: "Grocery", sku: "", mrp: "", costPrice: "", qty: "", unit: "pkt", expiryDate: "", status: "Active" });
     setOpen(false);
     toast.success("Product added", { description: next.name });
   }
@@ -216,7 +216,7 @@ export function ProductsPage() {
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Product Name</Label>
-              <Input placeholder="e.g. Brahmi Churna 100g" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input placeholder="e.g. Sunflower Oil 1L" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

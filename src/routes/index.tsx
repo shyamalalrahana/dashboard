@@ -50,11 +50,11 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Dashboard · Vaidya Ayur ERP" },
+      { title: "Dashboard · ShopOS" },
       {
         name: "description",
         content:
-          "Revenue, expenses, profit, inventory and pending payments — at a glance for your Ayurvedic unit.",
+          "Revenue, expenses, profit, inventory and pending payments — at a glance for your shop.",
       },
     ],
   }),
@@ -130,8 +130,8 @@ function KpiCard({
 function Dashboard() {
   return (
     <PageShell
-      title="Good morning, Vaidya"
-      description="Here's how your manufacturing unit is doing today."
+      title="Good morning"
+      description="Here's how your shop is doing today."
       actions={
         <Badge variant="secondary" className="gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-success" />
@@ -317,7 +317,7 @@ function Dashboard() {
               <div>
                 <p className="font-medium">4 SKUs below reorder level</p>
                 <p className="text-warning-foreground/80">
-                  Ashwagandha root, Hair oil 200ml, Triphala 60ct, Brahmi ghee.
+                  Basmati Rice 5kg, Wheat Flour 10kg, Toor Dal 1kg, Sunflower Oil 1L.
                 </p>
               </div>
             </div>

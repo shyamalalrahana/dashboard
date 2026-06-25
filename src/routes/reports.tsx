@@ -37,7 +37,7 @@ import {
 export const Route = createFileRoute("/reports")({
   head: () => ({
     meta: [
-      { title: "Reports · Vaidya Ayur ERP" },
+      { title: "Reports · ShopOS" },
       { name: "description", content: "P&L, expense, sales and GST reports." },
     ],
   }),
@@ -298,9 +298,9 @@ function InventoryReport() {
 
 function BatchReport() {
   const batchData = [
-    { batch: "CHY-25-09-A", product: "Chyawanprash 500g", mfg: "2025-09-05", expiry: "2027-09-04", manufactured: 220, sold: 180, remaining: 40 },
-    { batch: "OIL-25-09-B", product: "Herbal Hair Oil", mfg: "2025-09-12", expiry: "2027-03-11", manufactured: 180, sold: 162, remaining: 18 },
-    { batch: "ASH-25-08-C", product: "Ashwagandha Churna", mfg: "2025-08-22", expiry: "2026-08-21", manufactured: 340, sold: 280, remaining: 60 },
+    { batch: "OIL-25-09-A", product: "Sunflower Oil 1L", mfg: "2025-09-05", expiry: "2027-09-04", manufactured: 220, sold: 180, remaining: 40 },
+    { batch: "RIC-25-09-B", product: "Basmati Rice 5kg", mfg: "2025-09-12", expiry: "2027-03-11", manufactured: 180, sold: 162, remaining: 18 },
+    { batch: "FLR-25-08-C", product: "Wheat Flour 10kg", mfg: "2025-08-22", expiry: "2026-08-21", manufactured: 340, sold: 280, remaining: 60 },
   ];
   return (
     <Table>

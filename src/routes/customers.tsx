@@ -29,7 +29,7 @@ import { customers as initialCustomers, fmtINR } from "@/lib/mock-data";
 export const Route = createFileRoute("/customers")({
   head: () => ({
     meta: [
-      { title: "Customers · Vaidya Ayur ERP" },
+      { title: "Customers · ShopOS" },
       { name: "description", content: "Distributors, dealers and direct customers." },
     ],
   }),
@@ -130,7 +130,7 @@ function CustomersPage() {
             <div className="space-y-1.5">
               <Label>Business name</Label>
               <Input
-                placeholder="e.g. Ayur Wellness Pvt Ltd"
+                placeholder="e.g. Metro General Store"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />

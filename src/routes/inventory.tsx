@@ -37,7 +37,7 @@ import { inventory as initialInventory } from "@/lib/mock-data";
 export const Route = createFileRoute("/inventory")({
   head: () => ({
     meta: [
-      { title: "Inventory · Vaidya Ayur ERP" },
+      { title: "Inventory · ShopOS" },
       { name: "description", content: "Raw materials, finished goods and stock alerts." },
     ],
   }),
@@ -180,7 +180,7 @@ function InventoryPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Item name</Label>
-              <Input placeholder="e.g. Brahmi Churna 100g" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input placeholder="e.g. Sunflower Oil 1L" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Shield, Trash2, UserCheck, Users } from "lucide-react";
+import { Plus, Shield, Trash2, UserCheck, UserCog, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -138,6 +138,23 @@ export function StaffPage() {
   const [selectedRole, setSelectedRole] = useState<Role>(roles[1]);
   const [form, setForm] = useState({ name: "", phone: "", email: "", role: "cashier", salary: "", joinDate: "", status: "Active" as Staff["status"] });
 
+  // Confirmation modal
+  const [confirmDelete, setConfirmDelete] = useState<{ type: "staff"; id: string; label: string } | { type: "role"; id: string; label: string } | null>(null);
+
+  // Add Role dialog
+  const [addRoleOpen, setAddRoleOpen] = useState(false);
+  const ROLE_COLOR_OPTIONS = [
+    { label: "Blue", value: "bg-blue-500" },
+    { label: "Green", value: "bg-green-500" },
+    { label: "Orange", value: "bg-orange-500" },
+    { label: "Red", value: "bg-red-500" },
+    { label: "Pink", value: "bg-pink-500" },
+    { label: "Teal", value: "bg-teal-500" },
+    { label: "Yellow", value: "bg-yellow-500" },
+    { label: "Indigo", value: "bg-indigo-500" },
+  ];
+  const [roleForm, setRoleForm] = useState({ name: "", color: "bg-blue-500" });
+
   const active = staff.filter((s) => s.status === "Active");
   const totalSalary = staff.filter((s) => s.status === "Active").reduce((sum, s) => sum + s.salary, 0);
 
@@ -164,8 +181,45 @@ export function StaffPage() {
   }
 
   function handleRemoveStaff(id: string) {
-    setStaff(staff.filter((s) => s.id !== id));
-    toast.success("Staff removed");
+    const member = staff.find((s) => s.id === id);
+    if (member) setConfirmDelete({ type: "staff", id, label: member.name });
+  }
+
+  function handleRemoveRole(id: string) {
+    const role = roles.find((r) => r.id === id);
+    if (role) setConfirmDelete({ type: "role", id, label: role.name });
+  }
+
+  function handleConfirmDelete() {
+    if (!confirmDelete) return;
+    if (confirmDelete.type === "staff") {
+      setStaff(staff.filter((s) => s.id !== confirmDelete.id));
+      toast.success("Staff removed", { description: confirmDelete.label });
+    } else {
+      // reassign any staff with this role to cashier
+      setStaff(staff.map((s) => s.role === confirmDelete.id ? { ...s, role: "cashier" } : s));
+      setRoles(roles.filter((r) => r.id !== confirmDelete.id));
+      if (selectedRole.id === confirmDelete.id) setSelectedRole(roles.find((r) => r.id !== confirmDelete.id) ?? roles[0]);
+      toast.success("Role deleted", { description: confirmDelete.label });
+    }
+    setConfirmDelete(null);
+  }
+
+  function handleAddRole() {
+    if (!roleForm.name.trim()) return;
+    const id = roleForm.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+    const newRole: Role = {
+      id,
+      name: roleForm.name.trim(),
+      color: roleForm.color,
+      permissions: defaultPermissions(["dashboard"]),
+    };
+    setRoles([...roles, newRole]);
+    setSelectedRole(newRole);
+    setTab("roles");
+    setRoleForm({ name: "", color: "bg-blue-500" });
+    setAddRoleOpen(false);
+    toast.success("Role created", { description: `${newRole.name} · configure its sections now` });
   }
 
   function togglePermission(roleId: string, section: string) {
@@ -193,7 +247,11 @@ export function StaffPage() {
           <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4" /> Add Staff
           </Button>
-        ) : null
+        ) : (
+          <Button size="sm" className="gap-1.5" onClick={() => setAddRoleOpen(true)}>
+            <Plus className="h-4 w-4" /> Add Role
+          </Button>
+        )
       }
     >
       {/* Stat cards */}
@@ -300,21 +358,35 @@ export function StaffPage() {
                 {roles.map((role) => {
                   const count = staff.filter((s) => s.role === role.id).length;
                   const perms = Object.values(role.permissions).filter(Boolean).length;
+                  const isBuiltIn = ["owner", "manager", "cashier", "inventory_staff", "accountant"].includes(role.id);
                   return (
-                    <button
+                    <div
                       key={role.id}
-                      onClick={() => setSelectedRole(role)}
-                      className={`w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-muted/40 ${selectedRole.id === role.id ? "bg-muted/60" : ""}`}
+                      className={`flex items-center gap-3 p-4 transition-colors hover:bg-muted/40 ${selectedRole.id === role.id ? "bg-muted/60" : ""}`}
                     >
-                      <span className={`h-3 w-3 rounded-full shrink-0 ${role.color}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{role.name}</p>
-                        <p className="text-xs text-muted-foreground">{count} staff · {perms}/{ALL_SECTIONS.length} sections</p>
-                      </div>
-                      {selectedRole.id === role.id && (
-                        <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                      <button
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        onClick={() => setSelectedRole(role)}
+                      >
+                        <span className={`h-3 w-3 rounded-full shrink-0 ${role.color}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{role.name}</p>
+                          <p className="text-xs text-muted-foreground">{count} staff · {perms}/{ALL_SECTIONS.length} sections</p>
+                        </div>
+                        {selectedRole.id === role.id && (
+                          <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                        )}
+                      </button>
+                      {!isBuiltIn && (
+                        <button
+                          onClick={() => handleRemoveRole(role.id)}
+                          className="ml-1 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Delete role"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -361,6 +433,84 @@ export function StaffPage() {
           </Card>
         </div>
       )}
+
+      {/* ── CONFIRM DELETE MODAL ── */}
+      <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {confirmDelete?.type === "staff" ? "Remove Staff Member?" : "Delete Role?"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-sm text-muted-foreground">
+            {confirmDelete?.type === "staff" ? (
+              <>Are you sure you want to remove <span className="font-semibold text-foreground">{confirmDelete.label}</span> from your team? This cannot be undone.</>
+            ) : (
+              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete?.label}</span> role? Staff assigned to this role will be moved to Cashier.</>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              {confirmDelete?.type === "staff" ? "Remove" : "Delete Role"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── ADD ROLE DIALOG ── */}
+      <Dialog open={addRoleOpen} onOpenChange={setAddRoleOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add New Role</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Role Name</Label>
+              <Input
+                placeholder="e.g. Supervisor"
+                value={roleForm.name}
+                onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Colour</Label>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[
+                  { label: "Blue", value: "bg-blue-500" },
+                  { label: "Green", value: "bg-green-500" },
+                  { label: "Orange", value: "bg-orange-500" },
+                  { label: "Red", value: "bg-red-500" },
+                  { label: "Pink", value: "bg-pink-500" },
+                  { label: "Teal", value: "bg-teal-500" },
+                  { label: "Yellow", value: "bg-yellow-500" },
+                  { label: "Indigo", value: "bg-indigo-500" },
+                ].map((c) => (
+                  <button
+                    key={c.value}
+                    title={c.label}
+                    onClick={() => setRoleForm({ ...roleForm, color: c.value })}
+                    className={`h-7 w-7 rounded-full ${c.value} transition-all ${roleForm.color === c.value ? "ring-2 ring-offset-2 ring-foreground scale-110" : "opacity-70 hover:opacity-100"}`}
+                  />
+                ))}
+              </div>
+            </div>
+            {roleForm.name && (
+              <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2">
+                <span className={`h-3 w-3 rounded-full ${roleForm.color}`} />
+                <span className="text-sm font-medium">{roleForm.name}</span>
+                <span className="text-xs text-muted-foreground ml-auto">preview</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddRoleOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddRole} disabled={!roleForm.name.trim()}>
+              Create Role
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── ADD STAFF DIALOG ── */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

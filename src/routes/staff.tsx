@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Shield, Trash2, UserCheck, UserCog, Users } from "lucide-react";
+import { Pencil, Plus, Shield, Trash2, UserCheck, UserCog, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -44,18 +44,19 @@ export const Route = createFileRoute("/staff")({
   component: StaffPage,
 });
 
-// All sections in the app
-const ALL_SECTIONS = [
-  { key: "dashboard", label: "Dashboard" },
-  { key: "sales", label: "Sales" },
-  { key: "expenses", label: "Expenses" },
-  { key: "products", label: "Products" },
-  { key: "inventory", label: "Inventory" },
-  { key: "customers", label: "Customers" },
-  { key: "batches", label: "Batches" },
-  { key: "reports", label: "Reports" },
-  { key: "staff", label: "Staff" },
-  { key: "settings", label: "Settings" },
+type Section = { key: string; label: string; description: string; builtIn: boolean };
+
+const INITIAL_SECTIONS: Section[] = [
+  { key: "dashboard", label: "Dashboard", description: "Overview, KPIs, charts", builtIn: true },
+  { key: "sales", label: "Sales", description: "Create and view invoices", builtIn: true },
+  { key: "expenses", label: "Expenses", description: "Record and track expenses", builtIn: true },
+  { key: "products", label: "Products", description: "Product catalogue and pricing", builtIn: true },
+  { key: "inventory", label: "Inventory", description: "Stock levels and alerts", builtIn: true },
+  { key: "customers", label: "Customers", description: "Customer list and credit", builtIn: true },
+  { key: "batches", label: "Batches", description: "Batch and expiry tracking", builtIn: true },
+  { key: "reports", label: "Reports", description: "P&L, GST, and financial reports", builtIn: true },
+  { key: "staff", label: "Staff", description: "Manage staff and roles", builtIn: true },
+  { key: "settings", label: "Settings", description: "Business settings and configuration", builtIn: true },
 ];
 
 type Permissions = Record<string, boolean>;
@@ -79,14 +80,14 @@ type Staff = {
 };
 
 const defaultPermissions = (keys: string[]): Permissions =>
-  Object.fromEntries(ALL_SECTIONS.map((s) => [s.key, keys.includes(s.key)]));
+  Object.fromEntries(INITIAL_SECTIONS.map((s) => [s.key, keys.includes(s.key)]));
 
 const initialRoles: Role[] = [
   {
     id: "owner",
     name: "Owner",
     color: "bg-purple-500",
-    permissions: defaultPermissions(ALL_SECTIONS.map((s) => s.key)),
+    permissions: defaultPermissions(INITIAL_SECTIONS.map((s) => s.key)),
   },
   {
     id: "manager",
@@ -134,16 +135,23 @@ export function StaffPage() {
   const [tab, setTab] = useState<"staff" | "roles">("staff");
   const [staff, setStaff] = useState<Staff[]>(initialStaff);
   const [roles, setRoles] = useState<Role[]>(initialRoles);
+  const [sections, setSections] = useState<Section[]>(INITIAL_SECTIONS);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role>(roles[1]);
   const [form, setForm] = useState({ name: "", phone: "", email: "", role: "cashier", salary: "", joinDate: "", status: "Active" as Staff["status"] });
 
   // Confirmation modal
-  const [confirmDelete, setConfirmDelete] = useState<{ type: "staff"; id: string; label: string } | { type: "role"; id: string; label: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: "staff"; id: string; label: string } | { type: "role"; id: string; label: string } | { type: "section"; key: string; label: string } | null>(null);
 
-  // Add Role dialog
+  // Add/Edit Role dialog
   const [addRoleOpen, setAddRoleOpen] = useState(false);
-  const ROLE_COLOR_OPTIONS = [
+  const [roleForm, setRoleForm] = useState({ name: "", color: "bg-blue-500" });
+
+  // Add/Edit Section dialog
+  const [sectionDialog, setSectionDialog] = useState<{ mode: "add" | "edit"; key?: string } | null>(null);
+  const [sectionForm, setSectionForm] = useState({ label: "", description: "" });
+
+  const COLOR_OPTIONS = [
     { label: "Blue", value: "bg-blue-500" },
     { label: "Green", value: "bg-green-500" },
     { label: "Orange", value: "bg-orange-500" },
@@ -153,7 +161,6 @@ export function StaffPage() {
     { label: "Yellow", value: "bg-yellow-500" },
     { label: "Indigo", value: "bg-indigo-500" },
   ];
-  const [roleForm, setRoleForm] = useState({ name: "", color: "bg-blue-500" });
 
   const active = staff.filter((s) => s.status === "Active");
   const totalSalary = staff.filter((s) => s.status === "Active").reduce((sum, s) => sum + s.salary, 0);
@@ -195,12 +202,19 @@ export function StaffPage() {
     if (confirmDelete.type === "staff") {
       setStaff(staff.filter((s) => s.id !== confirmDelete.id));
       toast.success("Staff removed", { description: confirmDelete.label });
-    } else {
-      // reassign any staff with this role to cashier
+    } else if (confirmDelete.type === "role") {
       setStaff(staff.map((s) => s.role === confirmDelete.id ? { ...s, role: "cashier" } : s));
       setRoles(roles.filter((r) => r.id !== confirmDelete.id));
       if (selectedRole.id === confirmDelete.id) setSelectedRole(roles.find((r) => r.id !== confirmDelete.id) ?? roles[0]);
       toast.success("Role deleted", { description: confirmDelete.label });
+    } else if (confirmDelete.type === "section") {
+      setSections(sections.filter((s) => s.key !== confirmDelete.key));
+      setRoles(roles.map((r) => {
+        const p = { ...r.permissions };
+        delete p[confirmDelete.key];
+        return { ...r, permissions: p };
+      }));
+      toast.success("Section deleted", { description: confirmDelete.label });
     }
     setConfirmDelete(null);
   }
@@ -220,6 +234,37 @@ export function StaffPage() {
     setRoleForm({ name: "", color: "bg-blue-500" });
     setAddRoleOpen(false);
     toast.success("Role created", { description: `${newRole.name} · configure its sections now` });
+  }
+
+  function openAddSection() {
+    setSectionForm({ label: "", description: "" });
+    setSectionDialog({ mode: "add" });
+  }
+
+  function openEditSection(sec: Section) {
+    setSectionForm({ label: sec.label, description: sec.description });
+    setSectionDialog({ mode: "edit", key: sec.key });
+  }
+
+  function handleSaveSection() {
+    if (!sectionForm.label.trim()) return;
+    if (sectionDialog?.mode === "add") {
+      const key = sectionForm.label.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+      const newSec: Section = { key, label: sectionForm.label.trim(), description: sectionForm.description.trim(), builtIn: false };
+      setSections([...sections, newSec]);
+      // add the key to all roles' permissions (default off)
+      setRoles(roles.map((r) => ({ ...r, permissions: { ...r.permissions, [key]: false } })));
+      toast.success("Section added", { description: newSec.label });
+    } else if (sectionDialog?.mode === "edit" && sectionDialog.key) {
+      setSections(sections.map((s) => s.key === sectionDialog.key ? { ...s, label: sectionForm.label.trim(), description: sectionForm.description.trim() } : s));
+      toast.success("Section updated");
+    }
+    setSectionDialog(null);
+  }
+
+  function handleDeleteSection(key: string) {
+    const sec = sections.find((s) => s.key === key);
+    if (sec) setConfirmDelete({ type: "section", key, label: sec.label });
   }
 
   function togglePermission(roleId: string, section: string) {
@@ -371,7 +416,7 @@ export function StaffPage() {
                         <span className={`h-3 w-3 rounded-full shrink-0 ${role.color}`} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium">{role.name}</p>
-                          <p className="text-xs text-muted-foreground">{count} staff · {perms}/{ALL_SECTIONS.length} sections</p>
+                          <p className="text-xs text-muted-foreground">{count} staff · {perms}/{sections.length} sections</p>
                         </div>
                         {selectedRole.id === role.id && (
                           <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
@@ -396,30 +441,51 @@ export function StaffPage() {
           {/* Permissions panel */}
           <Card className="lg:col-span-2">
             <CardContent className="p-0">
-              <div className="border-b border-border p-4 flex items-center gap-3">
-                <span className={`h-3 w-3 rounded-full ${selectedRole.color}`} />
-                <div>
-                  <h2 className="font-display text-base font-semibold">{selectedRole.name}</h2>
-                  <p className="text-xs text-muted-foreground">Toggle sections this role can access</p>
+              <div className="border-b border-border p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className={`h-3 w-3 rounded-full ${selectedRole.color}`} />
+                  <div>
+                    <h2 className="font-display text-base font-semibold">{selectedRole.name}</h2>
+                    <p className="text-xs text-muted-foreground">Toggle sections this role can access</p>
+                  </div>
                 </div>
+                <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={openAddSection}>
+                  <Plus className="h-3.5 w-3.5" /> Add Section
+                </Button>
               </div>
               <div className="divide-y divide-border">
-                {ALL_SECTIONS.map((section) => {
+                {sections.map((section) => {
                   const allowed = roles.find((r) => r.id === selectedRole.id)?.permissions[section.key] ?? false;
                   const isOwner = selectedRole.id === "owner";
                   return (
-                    <div key={section.key} className="flex items-center justify-between px-6 py-4">
-                      <div>
+                    <div key={section.key} className="flex items-center gap-4 px-6 py-3.5">
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">{section.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {sectionDesc(section.key)}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{section.description}</p>
                       </div>
-                      <Switch
-                        checked={allowed}
-                        disabled={isOwner}
-                        onCheckedChange={() => togglePermission(selectedRole.id, section.key)}
-                      />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Switch
+                          checked={allowed}
+                          disabled={isOwner}
+                          onCheckedChange={() => togglePermission(selectedRole.id, section.key)}
+                        />
+                        <button
+                          onClick={() => openEditSection(section)}
+                          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          title="Edit section"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        {!section.builtIn && (
+                          <button
+                            onClick={() => handleDeleteSection(section.key)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Delete section"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -439,20 +505,55 @@ export function StaffPage() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {confirmDelete?.type === "staff" ? "Remove Staff Member?" : "Delete Role?"}
+              {confirmDelete?.type === "staff" ? "Remove Staff Member?" : confirmDelete?.type === "role" ? "Delete Role?" : "Delete Section?"}
             </DialogTitle>
           </DialogHeader>
           <div className="py-2 text-sm text-muted-foreground">
             {confirmDelete?.type === "staff" ? (
               <>Are you sure you want to remove <span className="font-semibold text-foreground">{confirmDelete.label}</span> from your team? This cannot be undone.</>
+            ) : confirmDelete?.type === "role" ? (
+              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete.label}</span> role? Staff assigned to this role will be moved to Cashier.</>
             ) : (
-              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete?.label}</span> role? Staff assigned to this role will be moved to Cashier.</>
+              <>Are you sure you want to delete the <span className="font-semibold text-foreground">{confirmDelete?.label}</span> section? It will be removed from all roles.</>
             )}
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              {confirmDelete?.type === "staff" ? "Remove" : "Delete Role"}
+              {confirmDelete?.type === "staff" ? "Remove" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── ADD / EDIT SECTION DIALOG ── */}
+      <Dialog open={!!sectionDialog} onOpenChange={(o) => !o && setSectionDialog(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{sectionDialog?.mode === "add" ? "Add Section" : "Edit Section"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Section Name</Label>
+              <Input
+                placeholder="e.g. Purchase Orders"
+                value={sectionForm.label}
+                onChange={(e) => setSectionForm({ ...sectionForm, label: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description <span className="text-muted-foreground">(optional)</span></Label>
+              <Input
+                placeholder="e.g. Manage supplier purchase orders"
+                value={sectionForm.description}
+                onChange={(e) => setSectionForm({ ...sectionForm, description: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSectionDialog(null)}>Cancel</Button>
+            <Button onClick={handleSaveSection} disabled={!sectionForm.label.trim()}>
+              {sectionDialog?.mode === "add" ? "Add Section" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -476,16 +577,7 @@ export function StaffPage() {
             <div className="space-y-1.5">
               <Label>Colour</Label>
               <div className="flex flex-wrap gap-2 pt-1">
-                {[
-                  { label: "Blue", value: "bg-blue-500" },
-                  { label: "Green", value: "bg-green-500" },
-                  { label: "Orange", value: "bg-orange-500" },
-                  { label: "Red", value: "bg-red-500" },
-                  { label: "Pink", value: "bg-pink-500" },
-                  { label: "Teal", value: "bg-teal-500" },
-                  { label: "Yellow", value: "bg-yellow-500" },
-                  { label: "Indigo", value: "bg-indigo-500" },
-                ].map((c) => (
+                {COLOR_OPTIONS.map((c) => (
                   <button
                     key={c.value}
                     title={c.label}
@@ -585,21 +677,6 @@ export function StaffPage() {
   );
 }
 
-function sectionDesc(key: string): string {
-  const map: Record<string, string> = {
-    dashboard: "Overview, KPIs, charts",
-    sales: "Create and view invoices",
-    expenses: "Record and track expenses",
-    products: "Product catalogue and pricing",
-    inventory: "Stock levels and alerts",
-    customers: "Customer list and credit",
-    batches: "Batch and expiry tracking",
-    reports: "P&L, GST, and financial reports",
-    staff: "Manage staff and roles",
-    settings: "Business settings and configuration",
-  };
-  return map[key] ?? "";
-}
 
 function StatCard({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (

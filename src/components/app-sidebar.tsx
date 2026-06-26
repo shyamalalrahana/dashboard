@@ -10,6 +10,7 @@ import {
   Leaf,
   FlaskConical,
   Package,
+  UserCog,
 } from "lucide-react";
 
 import {
@@ -35,6 +36,7 @@ const main = [
 ];
 
 const ops = [
+  { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Batches", url: "/batches", icon: FlaskConical },
   { title: "Reports", url: "/reports", icon: FileBarChart },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -52,8 +54,8 @@ export function AppSidebar() {
             <Leaf className="h-5 w-5" />
           </div>
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-semibold tracking-tight">Vaidya</span>
-            <span className="text-[11px] text-sidebar-foreground/60">Ayur Manufacturing</span>
+            <span className="text-sm font-semibold tracking-tight">ShopOS</span>
+            <span className="text-[11px] text-sidebar-foreground/60">My Business</span>
           </div>
         </div>
       </SidebarHeader>

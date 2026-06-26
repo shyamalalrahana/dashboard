@@ -810,8 +810,13 @@ function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
     <tr>
       <td style="padding:36px 48px 28px;border-bottom:1px solid #e8e8e8">
         <table width="100%" cellpadding="0" cellspacing="0"><tr>
-          <td style="font-size:22px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px">${bizName}</td>
-          <td style="text-align:right;font-size:13px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:1px">Receipt</td>
+          <td style="vertical-align:middle">
+            ${biz.logoUrl
+              ? `<img src="${biz.logoUrl}" alt="${bizName}" style="height:48px;max-width:160px;object-fit:contain;display:block;margin-bottom:6px">`
+              : ""}
+            <div style="font-size:22px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px">${bizName}</div>
+          </td>
+          <td style="text-align:right;font-size:13px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:1px;vertical-align:middle">Receipt</td>
         </tr></table>
       </td>
     </tr>
@@ -952,6 +957,7 @@ function printBill(sale: Sale, bizName: string, invoiceTerms: string) {
     @media print { body { padding: 8px; } }
   </style></head><body>
   <div class="center" style="margin-bottom:12px">
+    ${biz.logoUrl ? `<img src="${biz.logoUrl}" alt="${bizName}" style="height:56px;max-width:160px;object-fit:contain;margin-bottom:6px">` : ""}
     <div style="font-size:18px;font-weight:700;letter-spacing:1px">${bizName}</div>
     <div style="font-size:11px;color:#555">Counter Bill / Tax Invoice</div>
     ${gstin}
@@ -1003,6 +1009,7 @@ function BillDialog({
   const { date, time } = fmtDT(sale.createdAt);
   const subtotal = sale.items.reduce((s, i) => s + i.lineTotal, 0);
   const gst = computeGST(subtotal, taxCfg);
+  const biz = loadBusinessSettings();
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
@@ -1014,6 +1021,9 @@ function BillDialog({
         {/* Bill preview */}
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-5 font-mono text-sm space-y-3">
           <div className="text-center space-y-0.5">
+            {biz.logoUrl && (
+              <img src={biz.logoUrl} alt={bizName} className="h-10 max-w-[120px] object-contain mx-auto mb-1" />
+            )}
             <p className="text-base font-bold tracking-widest">{bizName}</p>
             <p className="text-xs text-muted-foreground">Counter Bill / Tax Invoice</p>
           </div>

@@ -6,6 +6,7 @@ import {
   Check,
   Crown,
   FileText,
+  Mail,
   Package,
   Percent,
   Shield,
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 import {
   loadSettings,
   saveSettings,
+  type EmailSettings,
 } from "@/lib/settings-store";
 
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +53,7 @@ type SectionKey =
   | "taxes"
   | "invoice"
   | "inventory"
+  | "email"
   | "notifications"
   | "security"
   | "subscription";
@@ -69,6 +72,7 @@ const NAV_GROUPS: { label: string; items: { key: SectionKey; icon: React.Compone
     items: [
       { key: "invoice",       icon: FileText,   label: "Invoice"       },
       { key: "inventory",     icon: Package,    label: "Inventory"     },
+      { key: "email",         icon: Mail,       label: "Email"         },
     ],
   },
   {
@@ -91,9 +95,10 @@ function SettingsPage() {
   const [invoice, setInvoice]     = useState(stored.invoice);
   const [inventory, setInventory] = useState(stored.inventory);
   const [notifs, setNotifs]       = useState(stored.notifs);
+  const [emailCfg, setEmailCfg]   = useState(stored.emailCfg);
 
   function save() {
-    saveSettings({ business, financial, taxes, invoice, inventory, notifs });
+    saveSettings({ business, financial, taxes, invoice, inventory, notifs, emailCfg });
     toast.success("Settings saved", { description: "Your changes have been applied." });
   }
 
@@ -149,6 +154,7 @@ function SettingsPage() {
           {section === "taxes"         && <TaxesSection         s={taxes}      setS={setTaxes}      onSave={save} />}
           {section === "invoice"       && <InvoiceSection       s={invoice}    setS={setInvoice}    onSave={save} />}
           {section === "inventory"     && <InventorySection     s={inventory}  setS={setInventory}  onSave={save} />}
+          {section === "email"         && <EmailSection         s={emailCfg}   setS={setEmailCfg}   onSave={save} />}
           {section === "notifications" && <NotificationsSection s={notifs}     setS={setNotifs}     onSave={save} />}
           {section === "security"      && <SecuritySection />}
           {section === "subscription"  && <SubscriptionSection />}
@@ -642,6 +648,163 @@ function NotificationsSection({
           <ToggleRow label="Daily Sales Summary" description="End-of-day revenue, invoices, and profit snapshot" checked={s.dailySummary} onChange={() => setS({ ...s, dailySummary: !s.dailySummary })} />
           <ToggleRow label="Weekly Report" description="Revenue and expense summary every Monday morning" checked={s.weeklyReport} onChange={() => setS({ ...s, weeklyReport: !s.weeklyReport })} />
           <ToggleRow label="GST Auto-report" description="Auto-prepare GSTR-1 on the 5th of each month" checked={s.gstAutoReport} onChange={() => setS({ ...s, gstAutoReport: !s.gstAutoReport })} />
+        </div>
+      </div>
+
+      <SaveBar onSave={onSave} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Section: Email
+// ─────────────────────────────────────────────
+
+const ACCENT_COLORS = [
+  { label: "Forest Green", value: "#2a7a5a" },
+  { label: "Ocean Blue",   value: "#1d6fa4" },
+  { label: "Deep Purple",  value: "#6d28d9" },
+  { label: "Crimson",      value: "#be123c" },
+  { label: "Slate",        value: "#334155" },
+];
+
+function EmailSection({
+  s, setS, onSave,
+}: {
+  s: EmailSettings;
+  setS: (v: EmailSettings) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="Email"
+        description="Customise the bill/receipt email your customers receive — subject, greeting, footer, colour, and what to include."
+      />
+
+      {/* Sender details */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Sender Details</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <F label="Sender Display Name" value={s.senderName} onChange={(v) => setS({ ...s, senderName: v })} placeholder="My Business" />
+          <F label="Reply-to Email" type="email" value={s.replyTo} onChange={(v) => setS({ ...s, replyTo: v })} placeholder="accounts@yourbiz.com" />
+        </div>
+        <div className="mt-4">
+          <F
+            label="Subject Line"
+            value={s.subjectTemplate}
+            onChange={(v) => setS({ ...s, subjectTemplate: v })}
+            placeholder="Your Receipt from {bizName} — {billNo}"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Available placeholders: <code className="bg-muted rounded px-1">{"{bizName}"}</code> <code className="bg-muted rounded px-1">{"{billNo}"}</code>
+          </p>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Greeting */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Greeting Section</h3>
+        <div className="space-y-4">
+          <F label="Heading" value={s.greeting} onChange={(v) => setS({ ...s, greeting: v })} placeholder="We appreciate your business." />
+          <div className="space-y-1.5">
+            <Label>Body Text</Label>
+            <Textarea
+              rows={3}
+              className="resize-none"
+              value={s.greetingBody}
+              onChange={(e) => setS({ ...s, greetingBody: e.target.value })}
+              placeholder="Thank you for shopping with us! A detailed summary of your purchase is below."
+            />
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Footer */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Footer Section</h3>
+        <div className="space-y-4">
+          <F label="Closing Heading" value={s.closing} onChange={(v) => setS({ ...s, closing: v })} placeholder="That's all." />
+          <div className="space-y-1.5">
+            <Label>Closing Body</Label>
+            <Textarea
+              rows={2}
+              className="resize-none"
+              value={s.closingBody}
+              onChange={(e) => setS({ ...s, closingBody: e.target.value })}
+              placeholder="Thank you for your purchase. We hope to see you again soon!"
+            />
+          </div>
+          <F label="Signature" value={s.signature} onChange={(v) => setS({ ...s, signature: v })} placeholder="— My Business Team" />
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Accent colour */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Accent Colour</h3>
+        <div className="flex flex-wrap gap-2">
+          {ACCENT_COLORS.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => setS({ ...s, accentColor: c.value })}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                s.accentColor === c.value
+                  ? "border-foreground bg-muted font-semibold"
+                  : "border-border text-muted-foreground hover:bg-muted/40"
+              }`}
+            >
+              <span
+                className="h-3.5 w-3.5 rounded-full shrink-0"
+                style={{ background: c.value }}
+              />
+              {c.label}
+            </button>
+          ))}
+          {/* Custom hex */}
+          <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5">
+            <input
+              type="color"
+              value={s.accentColor}
+              onChange={(e) => setS({ ...s, accentColor: e.target.value })}
+              className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+              title="Pick custom colour"
+            />
+            <span className="text-xs text-muted-foreground font-mono">{s.accentColor}</span>
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Include toggles */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Include in Email</h3>
+        <div className="space-y-2">
+          <ToggleRow
+            label="Invoice Terms & Conditions"
+            description="Show your invoice terms in the email footer"
+            checked={s.includeTerms}
+            onChange={() => setS({ ...s, includeTerms: !s.includeTerms })}
+          />
+          <ToggleRow
+            label="GSTIN"
+            description="Show your GSTIN number in the footer"
+            checked={s.includeGstin}
+            onChange={() => setS({ ...s, includeGstin: !s.includeGstin })}
+          />
+          <ToggleRow
+            label="Business Address"
+            description="Show your registered address at the bottom"
+            checked={s.includeAddress}
+            onChange={() => setS({ ...s, includeAddress: !s.includeAddress })}
+          />
         </div>
       </div>
 

@@ -66,6 +66,7 @@ import { fmtINR, salesTrend, topProducts } from "@/lib/mock-data";
 import {
   computeGST,
   loadBusinessSettings,
+  loadEmailSettings,
   loadInvoiceSettings,
   loadTaxSettings,
 } from "@/lib/settings-store";
@@ -727,8 +728,9 @@ function SalesPage() {
 }
 
 function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
-  const taxCfg = loadTaxSettings();
-  const biz    = loadBusinessSettings();
+  const taxCfg   = loadTaxSettings();
+  const biz      = loadBusinessSettings();
+  const emailCfg = loadEmailSettings();
   const { date, time } = fmtDT(sale.createdAt);
   const subtotal = sale.items.reduce((s, i) => s + i.lineTotal, 0);
   const gst = computeGST(subtotal, taxCfg);
@@ -751,7 +753,46 @@ function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
     </tr>` : "";
 
   const customerName = sale.customer !== "Walk-in" ? sale.customer : "Valued Customer";
-  const accentColor = "#2a7a5a";
+  const accentColor  = emailCfg.accentColor || "#2a7a5a";
+  const greetingText = emailCfg.greeting    || "We appreciate your business.";
+  const greetingBody = emailCfg.greetingBody
+    ? emailCfg.greetingBody + (biz.email ? ` If you have any questions, please email us at <a href="mailto:${biz.email}" style="color:${accentColor}">${biz.email}</a>.` : "")
+    : `Thank you for shopping with us! A detailed summary of your purchase is below.${biz.email ? ` If you have any questions, email us at <a href="mailto:${biz.email}" style="color:${accentColor}">${biz.email}</a>.` : ""}`;
+  const closingText  = emailCfg.closing     || "That's all.";
+  const closingBody  = emailCfg.closingBody || (invoiceTerms || "Thank you for your purchase. We hope to see you again soon!");
+  const signature    = emailCfg.signature   || `— ${bizName}`;
+  const subject      = (emailCfg.subjectTemplate || "Your Receipt from {bizName} — {billNo}")
+    .replace("{bizName}", bizName)
+    .replace("{billNo}", sale.id);
+
+  // Plain-text body for the mailto fallback (mail apps cannot render HTML)
+  const plainTextItems = sale.items.map((i) =>
+    `  ${i.productName.padEnd(26)} ×${i.qty}   ₹${i.lineTotal.toLocaleString("en-IN")}`
+  ).join("\n");
+  const plainTextBody = [
+    `Dear ${customerName},`,
+    "",
+    greetingText.replace(/<[^>]+>/g, ""),
+    "",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    `  Bill No  : ${sale.id}`,
+    `  Date     : ${date}  ${time}`,
+    sale.customerPhone ? `  Phone    : ${sale.customerPhone}` : null,
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    `  ${"Description".padEnd(26)} Qty   Amount`,
+    plainTextItems,
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    gst.gstAmount > 0 ? `  Subtotal                          ₹${gst.taxable.toLocaleString("en-IN")}` : null,
+    gst.gstAmount > 0 ? `  ${gst.rateLabel.padEnd(32)} ₹${gst.gstAmount.toLocaleString("en-IN")}` : null,
+    `  TOTAL                             ₹${sale.total.toLocaleString("en-IN")}`,
+    `  Payment  : ${sale.payment}   Status: ${sale.status}`,
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "",
+    emailCfg.includeTerms && invoiceTerms ? invoiceTerms : null,
+    "",
+    closingText.replace(/<[^>]+>/g, ""),
+    signature,
+  ].filter((l) => l !== null).join("\n");
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -798,11 +839,8 @@ function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
       <td style="padding:28px 48px;border-bottom:1px solid #e8e8e8">
         <table width="100%" cellpadding="0" cellspacing="0"><tr>
           <td style="vertical-align:top;padding-right:24px">
-            <div style="font-size:17px;font-weight:700;color:${accentColor};margin-bottom:10px">We appreciate your business.</div>
-            <div style="font-size:13px;color:#666;line-height:1.6">
-              Thank you for shopping with us! A detailed summary of your purchase is below.
-              ${biz.email ? `If you have any questions, please email us at <a href="mailto:${biz.email}" style="color:${accentColor}">${biz.email}</a>.` : ""}
-            </div>
+            <div style="font-size:17px;font-weight:700;color:${accentColor};margin-bottom:10px">${greetingText}</div>
+            <div style="font-size:13px;color:#666;line-height:1.6">${greetingBody}</div>
           </td>
           <td style="vertical-align:top;text-align:right;width:72px">
             <div style="width:64px;height:64px;border-radius:50%;background:#f0f0f0;display:inline-flex;align-items:center;justify-content:center;font-size:28px">🛍️</div>
@@ -839,12 +877,12 @@ function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
     <!-- Footer -->
     <tr>
       <td style="padding:24px 48px 36px;border-top:1px solid #e8e8e8;background:#fafafa">
-        <div style="font-size:15px;font-weight:700;color:${accentColor};margin-bottom:8px">That's all.</div>
-        <div style="font-size:13px;color:#666;line-height:1.6">
-          ${invoiceTerms || "Thank you for your purchase. We hope to see you again soon!"}
-        </div>
-        ${biz.address ? `<div style="font-size:12px;color:#aaa;margin-top:12px">${biz.address}</div>` : ""}
-        ${biz.gstin ? `<div style="font-size:12px;color:#aaa">GSTIN: ${biz.gstin}</div>` : ""}
+        <div style="font-size:15px;font-weight:700;color:${accentColor};margin-bottom:8px">${closingText}</div>
+        <div style="font-size:13px;color:#666;line-height:1.6">${closingBody}</div>
+        ${emailCfg.includeTerms && invoiceTerms ? `<div style="font-size:12px;color:#aaa;margin-top:10px;font-style:italic">${invoiceTerms}</div>` : ""}
+        <div style="margin-top:14px;font-size:13px;color:#444;font-weight:500">${signature}</div>
+        ${emailCfg.includeAddress && biz.address ? `<div style="font-size:12px;color:#aaa;margin-top:10px">${biz.address}</div>` : ""}
+        ${emailCfg.includeGstin && biz.gstin ? `<div style="font-size:12px;color:#aaa">GSTIN: ${biz.gstin}</div>` : ""}
       </td>
     </tr>
 
@@ -864,7 +902,7 @@ function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
   <span style="font-size:13px;color:#666">Save as PDF via File → Print, or open your mail app to send.</span>
   <div style="display:flex;gap:10px">
     <button onclick="window.print()" style="padding:9px 18px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:#333">🖨 Print / Save PDF</button>
-    <a href="mailto:${sale.customerEmail}?subject=${encodeURIComponent(`Your Receipt from ${bizName} — ${sale.id}`)}" style="padding:9px 18px;border:none;border-radius:6px;background:${accentColor};font-size:13px;font-weight:600;cursor:pointer;color:#fff;text-decoration:none">✉ Open Mail App</a>
+    <a href="mailto:${sale.customerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainTextBody)}" style="padding:9px 18px;border:none;border-radius:6px;background:${accentColor};font-size:13px;font-weight:600;cursor:pointer;color:#fff;text-decoration:none">✉ Open Mail App</a>
   </div>
 </div>
 <div style="height:70px"></div>

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Pencil, Plus, Shield, Trash2, UserCheck, UserCog, Users } from "lucide-react";
+import { Pencil, Plus, Search, Shield, Trash2, UserCheck, UserCog, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -137,6 +137,8 @@ export function StaffPage() {
   const [roles, setRoles] = useState<Role[]>(initialRoles);
   const [sections, setSections] = useState<Section[]>(INITIAL_SECTIONS);
   const [addOpen, setAddOpen] = useState(false);
+  const [editStaff, setEditStaff] = useState<Staff | null>(null);
+  const [editStaffForm, setEditStaffForm] = useState({ name: "", phone: "", email: "", role: "cashier", salary: "", status: "Active" as Staff["status"] });
   const [selectedRole, setSelectedRole] = useState<Role>(roles[1]);
   const [form, setForm] = useState({ name: "", phone: "", email: "", role: "cashier", salary: "", joinDate: "", status: "Active" as Staff["status"] });
 
@@ -157,6 +159,18 @@ export function StaffPage() {
     { label: "Yellow", value: "bg-yellow-500" },
     { label: "Indigo", value: "bg-indigo-500" },
   ];
+
+  const [staffSearch, setStaffSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filteredStaff = staff.filter((s) => {
+    const q = staffSearch.toLowerCase();
+    const matchSearch = !q || s.name.toLowerCase().includes(q) || s.phone.includes(q) || s.id.toLowerCase().includes(q);
+    const matchRole = roleFilter === "all" || s.role === roleFilter;
+    const matchStatus = statusFilter === "all" || s.status === statusFilter;
+    return matchSearch && matchRole && matchStatus;
+  });
 
   const active = staff.filter((s) => s.status === "Active");
   const totalSalary = staff.filter((s) => s.status === "Active").reduce((sum, s) => sum + s.salary, 0);
@@ -181,6 +195,17 @@ export function StaffPage() {
     setForm({ name: "", phone: "", email: "", role: "cashier", salary: "", joinDate: "", status: "Active" });
     setAddOpen(false);
     toast.success("Staff added", { description: `${next.name} · ${getRoleName(next.role)}` });
+  }
+
+  function openEditStaff(s: Staff) {
+    setEditStaff(s);
+    setEditStaffForm({ name: s.name, phone: s.phone, email: s.email, role: s.role, salary: String(s.salary), status: s.status });
+  }
+  function handleSaveEditStaff() {
+    if (!editStaff || !editStaffForm.name || !editStaffForm.phone || !editStaffForm.salary) return;
+    setStaff(staff.map((s) => s.id === editStaff.id ? { ...s, name: editStaffForm.name, phone: editStaffForm.phone, email: editStaffForm.email, role: editStaffForm.role, salary: Number(editStaffForm.salary), status: editStaffForm.status } : s));
+    setEditStaff(null);
+    toast.success("Staff updated");
   }
 
   function handleRemoveStaff(id: string) {
@@ -292,9 +317,27 @@ export function StaffPage() {
       {tab === "staff" && (
         <Card>
           <CardContent className="p-0">
-            <div className="border-b border-border p-4 flex items-center justify-between">
-              <h2 className="font-display text-lg font-semibold">All Staff</h2>
-              <span className="text-sm text-muted-foreground">{staff.length} members</span>
+            <div className="border-b border-border px-4 h-14 flex items-center gap-3">
+              <h2 className="font-display text-lg font-semibold mr-auto">All Staff</h2>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input className="pl-7 h-8 w-36 text-sm" placeholder="Search…" value={staffSearch} onChange={(e) => setStaffSearch(e.target.value)} />
+              </div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="h-8 w-24 text-sm shrink-0"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All roles</SelectItem>
+                  {roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 w-24 text-sm shrink-0"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Table>
               <TableHeader>
@@ -311,7 +354,7 @@ export function StaffPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {staff.map((s) => (
+                {filteredStaff.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell>
                       <span className="inline-flex items-center whitespace-nowrap rounded-md border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
@@ -339,14 +382,19 @@ export function StaffPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleRemoveStaff(s.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditStaff(s)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveStaff(s.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -515,6 +563,66 @@ export function StaffPage() {
             <Button onClick={handleSaveRole} disabled={!roleForm.name.trim()}>
               {roleDialog?.mode === "add" ? "Create Role" : "Save Changes"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── EDIT STAFF DIALOG ── */}
+      <Dialog open={!!editStaff} onOpenChange={(o) => !o && setEditStaff(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Edit Staff Member</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Full Name</Label>
+              <Input value={editStaffForm.name} onChange={(e) => setEditStaffForm({ ...editStaffForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Phone Number</Label>
+                <Input value={editStaffForm.phone} onChange={(e) => setEditStaffForm({ ...editStaffForm, phone: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email (optional)</Label>
+                <Input value={editStaffForm.email} onChange={(e) => setEditStaffForm({ ...editStaffForm, email: e.target.value })} />
+              </div>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Select value={editStaffForm.role} onValueChange={(v) => setEditStaffForm({ ...editStaffForm, role: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {roles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        <span className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full inline-block ${r.color}`} />
+                          {r.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Monthly Salary (₹)</Label>
+                <Input type="number" value={editStaffForm.salary} onChange={(e) => setEditStaffForm({ ...editStaffForm, salary: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={editStaffForm.status} onValueChange={(v) => setEditStaffForm({ ...editStaffForm, status: v as Staff["status"] })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditStaff(null)}>Cancel</Button>
+            <Button onClick={handleSaveEditStaff} disabled={!editStaffForm.name || !editStaffForm.phone || !editStaffForm.salary}>Save changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowRight, Download, FileText, X } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Calendar, Download, FileText } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
@@ -64,14 +64,22 @@ const REPORTS: { key: ReportKey; name: string; desc: string }[] = [
   { key: "batch", name: "Batch Movement", desc: "Manufactured, sold and remaining by batch." },
 ];
 
-function PLReport() {
+function PLReport({ scale }: ReportProps) {
+  const rev = Math.round(financials.revenue * scale);
+  const exp = Math.round(financials.expenses * scale);
+  const profit = rev - exp;
+  const trendData = monthlyTrend.map((m) => ({
+    ...m,
+    revenue: Math.round(m.revenue * scale),
+    expenses: Math.round(m.expenses * scale),
+  }));
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Revenue", value: financials.revenue, color: "text-success" },
-          { label: "Expenses", value: financials.expenses, color: "text-destructive" },
-          { label: "Net Profit", value: financials.profit, color: "text-primary" },
+          { label: "Revenue", value: rev, color: "text-success" },
+          { label: "Expenses", value: exp, color: "text-destructive" },
+          { label: "Net Profit", value: profit, color: "text-primary" },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border p-4">
             <p className="text-xs uppercase text-muted-foreground">{s.label}</p>
@@ -80,10 +88,10 @@ function PLReport() {
         ))}
       </div>
       <div>
-        <p className="mb-2 text-sm font-medium">Monthly trend</p>
+        <p className="mb-2 text-sm font-medium">Trend</p>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyTrend}>
+            <BarChart data={trendData}>
               <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
               <YAxis tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v) => "₹" + v / 1000 + "k"} />
               <Tooltip formatter={(v: number) => fmtINR(v)} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
@@ -95,21 +103,23 @@ function PLReport() {
       </div>
       <div className="rounded-lg border p-4 text-sm space-y-2">
         <Row label="Gross margin" value={financials.margin.toFixed(1) + "%"} />
-        <Row label="Operating profit" value={fmtINR(financials.profit)} />
-        <Row label="Cost ratio" value={((financials.expenses / financials.revenue) * 100).toFixed(1) + "%"} />
+        <Row label="Operating profit" value={fmtINR(profit)} />
+        <Row label="Cost ratio" value={rev > 0 ? ((exp / rev) * 100).toFixed(1) + "%" : "—"} />
       </div>
     </div>
   );
 }
 
-function ExpenseReport() {
+function ExpenseReport({ scale }: ReportProps) {
+  const scaled = expenseBreakdown.map((e) => ({ ...e, value: Math.round(e.value * scale) }));
+  const total = scaled.reduce((a, b) => a + b.value, 0);
   return (
     <div className="space-y-4">
       <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={expenseBreakdown} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
-              {expenseBreakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            <Pie data={scaled} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
+              {scaled.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
             </Pie>
             <Tooltip formatter={(v: number) => fmtINR(v)} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
           </PieChart>
@@ -124,46 +134,35 @@ function ExpenseReport() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {expenseBreakdown.map((e, i) => {
-            const total = expenseBreakdown.reduce((a, b) => a + b.value, 0);
-            return (
-              <TableRow key={e.name}>
-                <TableCell>
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: COLORS[i] }} />
-                    {e.name}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right tabular-nums font-medium">{fmtINR(e.value)}</TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {((e.value / total) * 100).toFixed(1)}%
-                </TableCell>
-              </TableRow>
-            );
-          })}
+          {scaled.map((e, i) => (
+            <TableRow key={e.name}>
+              <TableCell>
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: COLORS[i] }} />
+                  {e.name}
+                </span>
+              </TableCell>
+              <TableCell className="text-right tabular-nums font-medium">{fmtINR(e.value)}</TableCell>
+              <TableCell className="text-right tabular-nums text-muted-foreground">
+                {total > 0 ? ((e.value / total) * 100).toFixed(1) : "0.0"}%
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
-      <div className="text-sm text-muted-foreground pt-2 border-t">
-        <p className="font-medium text-foreground">Recent entries</p>
-        {recentExpenses.slice(0, 3).map((e) => (
-          <div key={e.id} className="flex justify-between py-1">
-            <span>{e.note}</span>
-            <span className="font-medium">{fmtINR(e.amount)}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
 
-function SalesReport() {
+function SalesReport({ scale }: ReportProps) {
+  const scaledSales = recentSales.map((s) => ({ ...s, amount: Math.round(s.amount * scale) }));
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total invoices", value: String(recentSales.length) },
-          { label: "Paid", value: String(recentSales.filter((s) => s.status === "Paid").length) },
-          { label: "Pending", value: String(recentSales.filter((s) => s.status === "Pending").length) },
+          { label: "Total invoices", value: String(scaledSales.length) },
+          { label: "Paid", value: String(scaledSales.filter((s) => s.status === "Paid").length) },
+          { label: "Pending", value: String(scaledSales.filter((s) => s.status === "Pending").length) },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border p-3 text-center">
             <p className="text-xs text-muted-foreground">{s.label}</p>
@@ -182,7 +181,7 @@ function SalesReport() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {recentSales.map((s) => (
+          {scaledSales.map((s) => (
             <TableRow key={s.id}>
               <TableCell>
                 <span className="inline-flex items-center whitespace-nowrap rounded-md border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{s.id}</span>
@@ -203,15 +202,15 @@ function SalesReport() {
   );
 }
 
-function GSTReport() {
-  const taxableRevenue = financials.revenue * 0.85;
+function GSTReport({ scale, period }: ReportProps) {
+  const taxableRevenue = financials.revenue * scale * 0.85;
   const gstCollected = taxableRevenue * 0.12;
-  const inputCredit = financials.expenses * 0.18 * 0.6;
+  const inputCredit = financials.expenses * scale * 0.18 * 0.6;
   const netPayable = gstCollected - inputCredit;
   return (
     <div className="space-y-4">
       <div className="rounded-lg border p-4 space-y-3 text-sm">
-        <p className="font-medium text-base">GSTR-3B Summary — September 2025</p>
+        <p className="font-medium text-base">GSTR-3B Summary — {period}</p>
         <Row label="Taxable turnover" value={fmtINR(taxableRevenue)} />
         <Row label="GST collected (12%)" value={fmtINR(gstCollected)} />
         <Row label="Input tax credit" value={fmtINR(inputCredit)} />
@@ -254,7 +253,7 @@ function GSTReport() {
   );
 }
 
-function InventoryReport() {
+function InventoryReport(_props: ReportProps) {
   const unitCost: Record<string, number> = { "kg": 320, "L": 180, "jar": 120, "btl": 85, "pkt": 65, "box": 110 };
   return (
     <div className="space-y-4">
@@ -296,12 +295,17 @@ function InventoryReport() {
   );
 }
 
-function BatchReport() {
+function BatchReport({ scale }: ReportProps) {
   const batchData = [
     { batch: "OIL-25-09-A", product: "Sunflower Oil 1L", mfg: "2025-09-05", expiry: "2027-09-04", manufactured: 220, sold: 180, remaining: 40 },
     { batch: "RIC-25-09-B", product: "Basmati Rice 5kg", mfg: "2025-09-12", expiry: "2027-03-11", manufactured: 180, sold: 162, remaining: 18 },
     { batch: "FLR-25-08-C", product: "Wheat Flour 10kg", mfg: "2025-08-22", expiry: "2026-08-21", manufactured: 340, sold: 280, remaining: 60 },
-  ];
+  ].map((b) => ({
+    ...b,
+    manufactured: Math.round(b.manufactured * scale),
+    sold: Math.round(b.sold * scale),
+    remaining: Math.round(b.remaining * scale),
+  }));
   return (
     <Table>
       <TableHeader>
@@ -341,7 +345,20 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
   );
 }
 
-const REPORT_CONTENT: Record<ReportKey, React.FC> = {
+type Period = "week" | "month" | "last_month" | "quarter" | "year" | "custom";
+
+const PERIODS: { key: Period; label: string; short: string; scale: number }[] = [
+  { key: "week",       label: "This Week",    short: "Wk 39, Sep 2025", scale: 0.23 },
+  { key: "month",      label: "This Month",   short: "September 2025",  scale: 1    },
+  { key: "last_month", label: "Last Month",   short: "August 2025",     scale: 0.91 },
+  { key: "quarter",    label: "This Quarter", short: "Q2 FY 2025–26",   scale: 2.85 },
+  { key: "year",       label: "This Year",    short: "FY 2025–26",      scale: 11.4 },
+  { key: "custom",     label: "Custom Range", short: "Custom",          scale: 1    },
+];
+
+type ReportProps = { scale: number; period: string };
+
+const REPORT_CONTENT: Record<ReportKey, React.FC<ReportProps>> = {
   pl: PLReport,
   expense: ExpenseReport,
   sales: SalesReport,
@@ -350,13 +367,107 @@ const REPORT_CONTENT: Record<ReportKey, React.FC> = {
   batch: BatchReport,
 };
 
+// baseline = 30 days (one month), all preset scales are relative to this
+const BASELINE_DAYS = 30;
+
+function formatDateShort(d: string) {
+  if (!d) return "";
+  return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function ReportsPage() {
   const [active, setActive] = useState<ReportKey | null>(null);
+  const [period, setPeriod] = useState<Period>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const { scale, periodShort } = useMemo(() => {
+    if (period === "custom") {
+      if (customFrom && customTo && customTo >= customFrom) {
+        const days = Math.max(1, Math.round(
+          (new Date(customTo).getTime() - new Date(customFrom).getTime()) / (1000 * 60 * 60 * 24) + 1
+        ));
+        const s = days / BASELINE_DAYS;
+        const label = days === 1
+          ? formatDateShort(customFrom)
+          : `${formatDateShort(customFrom)} – ${formatDateShort(customTo)}`;
+        return { scale: s, periodShort: label };
+      }
+      return { scale: 1, periodShort: "Custom" };
+    }
+    const p = PERIODS.find((p) => p.key === period)!;
+    return { scale: p.scale, periodShort: p.short };
+  }, [period, customFrom, customTo]);
+
   const activeReport = REPORTS.find((r) => r.key === active);
   const ReportComponent = active ? REPORT_CONTENT[active] : null;
 
+  const scaledRev = Math.round(financials.revenue * scale);
+  const scaledExp = Math.round(financials.expenses * scale);
+  const scaledProfit = scaledRev - scaledExp;
+
   function handleDownload() {
-    toast.success("Report downloaded", { description: `${activeReport?.name} · September 2025.pdf` });
+    if (!active || !activeReport) return;
+    const csvRows: string[][] = [];
+    const p = periodShort;
+
+    if (active === "pl") {
+      csvRows.push(["Metric", "Value"]);
+      csvRows.push(["Period", p]);
+      csvRows.push(["Revenue", String(scaledRev)]);
+      csvRows.push(["Expenses", String(scaledExp)]);
+      csvRows.push(["Net Profit", String(scaledProfit)]);
+      csvRows.push(["Gross Margin %", financials.margin.toFixed(1)]);
+      csvRows.push([]);
+      csvRows.push(["Month", "Revenue", "Expenses"]);
+      monthlyTrend.forEach((m) => csvRows.push([m.month, String(Math.round(m.revenue * scale)), String(Math.round(m.expenses * scale))]));
+    } else if (active === "expense") {
+      const scaled = expenseBreakdown.map((e) => ({ ...e, value: Math.round(e.value * scale) }));
+      const total = scaled.reduce((a, b) => a + b.value, 0);
+      csvRows.push(["Period", p]);
+      csvRows.push(["Category", "Amount", "Share %"]);
+      scaled.forEach((e) => csvRows.push([e.name, String(e.value), ((e.value / total) * 100).toFixed(1)]));
+    } else if (active === "sales") {
+      csvRows.push(["Period", p]);
+      csvRows.push(["Invoice", "Customer", "Date", "Amount", "Status"]);
+      recentSales.forEach((s) => csvRows.push([s.id, s.customer, s.date, String(Math.round(s.amount * scale)), s.status]));
+    } else if (active === "gst") {
+      const taxable = scaledRev * 0.85;
+      const gstCol = taxable * 0.12;
+      const itc = scaledExp * 0.18 * 0.6;
+      csvRows.push(["GSTR-3B Summary", p]);
+      csvRows.push(["Taxable Turnover", taxable.toFixed(0)]);
+      csvRows.push(["GST Collected (12%)", gstCol.toFixed(0)]);
+      csvRows.push(["Input Tax Credit", itc.toFixed(0)]);
+      csvRows.push(["Net GST Payable", (gstCol - itc).toFixed(0)]);
+      csvRows.push([]);
+      csvRows.push(["Customer", "City", "Outstanding"]);
+      customers.forEach((c) => csvRows.push([c.name, c.city, String(c.outstanding)]));
+    } else if (active === "inventory") {
+      const unitCost: Record<string, number> = { kg: 320, L: 180, jar: 120, btl: 85, pkt: 65, box: 110 };
+      csvRows.push(["SKU", "Name", "Qty", "Unit", "Unit Cost", "Total Value"]);
+      inventory.forEach((item) => {
+        const cost = unitCost[item.unit] ?? 100;
+        csvRows.push([item.sku, item.name, String(item.qty), item.unit, String(cost), String(item.qty * cost)]);
+      });
+    } else if (active === "batch") {
+      csvRows.push(["Batch", "Product", "Mfg Date", "Expiry", "Manufactured", "Sold", "Remaining"]);
+      [
+        { batch: "OIL-25-09-A", product: "Sunflower Oil 1L", mfg: "2025-09-05", expiry: "2027-09-04", manufactured: 220, sold: 180, remaining: 40 },
+        { batch: "RIC-25-09-B", product: "Basmati Rice 5kg", mfg: "2025-09-12", expiry: "2027-03-11", manufactured: 180, sold: 162, remaining: 18 },
+        { batch: "FLR-25-08-C", product: "Wheat Flour 10kg", mfg: "2025-08-22", expiry: "2026-08-21", manufactured: 340, sold: 280, remaining: 60 },
+      ].forEach((b) => csvRows.push([b.batch, b.product, b.mfg, b.expiry, String(Math.round(b.manufactured * scale)), String(Math.round(b.sold * scale)), String(Math.round(b.remaining * scale))]));
+    }
+
+    const csv = csvRows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeReport.name.replace(/\s+/g, "_")}_${periodShort.replace(/[\s\/–,]/g, "_")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Report downloaded", { description: `${activeReport.name} · ${periodShort}` });
   }
 
   return (
@@ -364,11 +475,66 @@ function ReportsPage() {
       title="Reports"
       description="Generate financial and operational reports for the current period."
     >
+      {/* Period filter chips */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-muted-foreground shrink-0">Period:</span>
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPeriod(p.key)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-sm font-medium transition-colors border ${
+                period === p.key
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {p.key === "custom" && <Calendar className="h-3.5 w-3.5" />}
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom date range picker */}
+        {period === "custom" && (
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">From</label>
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo || undefined}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-8 rounded-md border border-border bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">To</label>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom || undefined}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="h-8 rounded-md border border-border bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            {customFrom && customTo && customTo >= customFrom && (
+              <p className="text-sm text-muted-foreground pb-0.5">
+                {Math.round((new Date(customTo).getTime() - new Date(customFrom).getTime()) / (1000 * 60 * 60 * 24) + 1)} days selected
+              </p>
+            )}
+            {customFrom && customTo && customTo < customFrom && (
+              <p className="text-sm text-destructive pb-0.5">End date must be after start date</p>
+            )}
+          </div>
+        )}
+      </div>
+
       <Card>
         <CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
-          <Snap label="Revenue" value={fmtINR(financials.revenue)} />
-          <Snap label="Expenses" value={fmtINR(financials.expenses)} />
-          <Snap label="Net profit" value={fmtINR(financials.profit)} accent />
+          <Snap label="Revenue" value={fmtINR(scaledRev)} sub={periodShort} />
+          <Snap label="Expenses" value={fmtINR(scaledExp)} />
+          <Snap label="Net profit" value={fmtINR(scaledProfit)} accent />
         </CardContent>
       </Card>
 
@@ -394,30 +560,28 @@ function ReportsPage() {
       <Dialog open={!!active} onOpenChange={(o) => !o && setActive(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pr-6">
               <DialogTitle>{activeReport?.name}</DialogTitle>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={handleDownload}>
-                  <Download className="h-3.5 w-3.5" /> Download
-                </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setActive(null)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={handleDownload}>
+                <Download className="h-3.5 w-3.5" /> Download
+              </Button>
             </div>
-            <p className="text-sm text-muted-foreground">{activeReport?.desc} · September 2025</p>
+            <p className="text-sm text-muted-foreground">{activeReport?.desc} · {periodShort}</p>
           </DialogHeader>
-          {ReportComponent && <ReportComponent />}
+          {ReportComponent && <ReportComponent scale={scale} period={periodShort} />}
         </DialogContent>
       </Dialog>
     </PageShell>
   );
 }
 
-function Snap({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Snap({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+        {sub && <span className="text-xs text-muted-foreground/60">{sub}</span>}
+      </div>
       <p className={`mt-1 font-display text-2xl font-semibold tabular-nums ${accent ? "text-primary" : ""}`}>
         {value}
       </p>

@@ -1,9 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Package, Plus } from "lucide-react";
+import { AlertTriangle, Package, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { PageShell } from "@/components/page-shell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,15 +91,46 @@ function formatDate(dateStr: string) {
 
 export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [open, setOpen] = useState(false);
+  const [editItem, setEditItem] = useState<Product | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", category: "Grocery", sku: "", mrp: "", costPrice: "", qty: "", unit: "pkt", expiryDate: "", status: "Active" as Product["status"] });
   const [form, setForm] = useState({
     name: "", category: "Grocery", sku: "", mrp: "", costPrice: "",
     qty: "", unit: "pkt", expiryDate: "", status: "Active" as Product["status"],
   });
 
+  const filteredProducts = products.filter((p) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
+    const matchCat = categoryFilter === "all" || p.category === categoryFilter;
+    const matchStatus = statusFilter === "all" || p.status === statusFilter;
+    return matchSearch && matchCat && matchStatus;
+  });
+
   const active = products.filter((p) => p.status === "Active");
   const expiring = products.filter((p) => expiryStatus(p.expiryDate) === "expiring" || expiryStatus(p.expiryDate) === "expired");
   const totalValue = products.reduce((sum, p) => sum + p.costPrice * p.qty, 0);
+
+  function openEdit(p: Product) {
+    setEditItem(p);
+    setEditForm({ name: p.name, category: p.category, sku: p.sku, mrp: String(p.mrp), costPrice: String(p.costPrice), qty: String(p.qty), unit: p.unit, expiryDate: p.expiryDate, status: p.status });
+  }
+  function handleSaveEdit() {
+    if (!editItem || !editForm.name || !editForm.mrp) return;
+    setProducts(products.map((p) => p.id === editItem.id ? { ...p, ...editForm, mrp: Number(editForm.mrp), costPrice: Number(editForm.costPrice) || 0, qty: Number(editForm.qty) || 0 } : p));
+    setEditItem(null);
+    toast.success("Product updated");
+  }
+  function handleDelete() {
+    if (!deleteId) return;
+    setProducts(products.filter((p) => p.id !== deleteId));
+    setDeleteId(null);
+    toast.success("Product deleted");
+  }
 
   function handleSubmit() {
     if (!form.name || !form.sku || !form.mrp || !form.expiryDate) return;
@@ -141,9 +182,28 @@ export function ProductsPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="border-b border-border p-4 flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold">All Products</h2>
-            <span className="text-sm text-muted-foreground">{products.length} products</span>
+          <div className="border-b border-border px-4 h-14 flex items-center gap-3">
+            <h2 className="font-display text-lg font-semibold mr-auto">All Products</h2>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input className="pl-7 h-8 w-36 text-sm" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-8 w-28 text-sm shrink-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 w-28 text-sm shrink-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+                <SelectItem value="Discontinued">Discontinued</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Table>
             <TableHeader>
@@ -156,10 +216,11 @@ export function ProductsPage() {
                 <TableHead className="text-right">Quantity</TableHead>
                 <TableHead>Expiry Date</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((p) => {
+              {filteredProducts.map((p) => {
                 const exp = expiryStatus(p.expiryDate);
                 return (
                   <TableRow key={p.id}>
@@ -200,6 +261,16 @@ export function ProductsPage() {
                         {p.status}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(p.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -207,6 +278,85 @@ export function ProductsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editItem} onOpenChange={(o) => !o && setEditItem(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Edit Product</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Product Name</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>SKU</Label>
+                <Input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>MRP (₹)</Label>
+                <Input type="number" value={editForm.mrp} onChange={(e) => setEditForm({ ...editForm, mrp: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cost Price (₹)</Label>
+                <Input type="number" value={editForm.costPrice} onChange={(e) => setEditForm({ ...editForm, costPrice: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label>Quantity</Label>
+                <Input type="number" value={editForm.qty} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Unit</Label>
+                <Input value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v as Product["status"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Discontinued">Discontinued</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Expiry Date</Label>
+              <Input type="date" value={editForm.expiryDate} onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={!editForm.name || !editForm.mrp}>Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete AlertDialog */}
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete product?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">

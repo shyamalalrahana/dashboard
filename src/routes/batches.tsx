@@ -1,9 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FlaskConical, Plus } from "lucide-react";
+import { FlaskConical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { PageShell } from "@/components/page-shell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,11 +63,45 @@ const PRODUCTS = topProducts.map((p) => p.name);
 
 function BatchesPage() {
   const [batches, setBatches] = useState<Batch[]>(initialBatches);
+  const [search, setSearch] = useState("");
+  const [expiryFilter, setExpiryFilter] = useState("all");
   const [open, setOpen] = useState(false);
+  const [editItem, setEditItem] = useState<Batch | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ product: "", mfg: "", expiry: "", qty: "" });
   const [form, setForm] = useState({ batch: "", product: "", mfg: "", expiry: "", qty: "" });
+
+  const filteredBatches = batches.filter((b) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || b.batch.toLowerCase().includes(q) || b.product.toLowerCase().includes(q);
+    const d = daysTo(b.expiry);
+    const matchExpiry =
+      expiryFilter === "all" ||
+      (expiryFilter === "expiring" && d >= 0 && d < 180) ||
+      (expiryFilter === "expired" && d < 0) ||
+      (expiryFilter === "fresh" && d >= 180);
+    return matchSearch && matchExpiry;
+  });
 
   const expiringSoon = batches.filter((b) => daysTo(b.expiry) < 180).length;
   const fresh = batches.length - expiringSoon;
+
+  function openEdit(b: Batch) {
+    setEditItem(b);
+    setEditForm({ product: b.product, mfg: b.mfg, expiry: b.expiry, qty: String(b.qty) });
+  }
+  function handleSaveEdit() {
+    if (!editItem || !editForm.product || !editForm.qty) return;
+    setBatches(batches.map((b) => b.batch === editItem.batch ? { ...b, product: editForm.product, mfg: editForm.mfg, expiry: editForm.expiry, qty: Number(editForm.qty) } : b));
+    setEditItem(null);
+    toast.success("Batch updated");
+  }
+  function handleDelete() {
+    if (!deleteId) return;
+    setBatches(batches.filter((b) => b.batch !== deleteId));
+    setDeleteId(null);
+    toast.success("Batch deleted");
+  }
 
   function handleSubmit() {
     if (!form.batch || !form.product || !form.mfg || !form.expiry || !form.qty) return;
@@ -92,9 +136,21 @@ function BatchesPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="border-b border-border p-4 flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold">All batches</h2>
-            <span className="text-sm text-muted-foreground">{batches.length} records</span>
+          <div className="border-b border-border px-4 h-14 flex items-center gap-3">
+            <h2 className="font-display text-lg font-semibold mr-auto">All batches</h2>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input className="pl-7 h-8 w-40 text-sm" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Select value={expiryFilter} onValueChange={setExpiryFilter}>
+              <SelectTrigger className="h-8 w-32 text-sm shrink-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All batches</SelectItem>
+                <SelectItem value="fresh">Fresh</SelectItem>
+                <SelectItem value="expiring">Expiring soon</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Table>
             <TableHeader>
@@ -105,10 +161,11 @@ function BatchesPage() {
                 <TableHead>Expiry</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {batches.map((b) => {
+              {filteredBatches.map((b) => {
                 const d = daysTo(b.expiry);
                 const soon = d < 180;
                 return (
@@ -134,6 +191,16 @@ function BatchesPage() {
                         {soon ? `Expires in ${d}d` : "Fresh"}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(b)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(b.batch)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -141,6 +208,54 @@ function BatchesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editItem} onOpenChange={(o) => !o && setEditItem(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Batch</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Product</Label>
+              <Select value={editForm.product} onValueChange={(v) => setEditForm({ ...editForm, product: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{PRODUCTS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Quantity</Label>
+              <Input type="number" value={editForm.qty} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Manufacture date</Label>
+                <Input type="date" value={editForm.mfg} onChange={(e) => setEditForm({ ...editForm, mfg: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Expiry date</Label>
+                <Input type="date" value={editForm.expiry} onChange={(e) => setEditForm({ ...editForm, expiry: e.target.value })} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={!editForm.product || !editForm.qty}>Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete AlertDialog */}
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete batch?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

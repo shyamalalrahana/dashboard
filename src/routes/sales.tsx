@@ -728,41 +728,154 @@ function SalesPage() {
 
 function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
   const taxCfg = loadTaxSettings();
+  const biz    = loadBusinessSettings();
   const { date, time } = fmtDT(sale.createdAt);
   const subtotal = sale.items.reduce((s, i) => s + i.lineTotal, 0);
   const gst = computeGST(subtotal, taxCfg);
-  const itemLines = sale.items.map((i) => `  ${i.productName.padEnd(24)} x${i.qty}  ₹${i.lineTotal}`).join("\n");
-  const taxLine = gst.gstAmount > 0
-    ? `  ${gst.rateLabel.padEnd(20)}        ₹${gst.gstAmount}\n`
-    : "";
-  const body = [
-    "Dear " + (sale.customer !== "Walk-in" ? sale.customer : "Customer") + ",",
-    "",
-    `Thank you for shopping at ${bizName}! Here is your bill:`,
-    "",
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    `  Bill No  : ${sale.id}`,
-    `  Date     : ${date}  ${time}`,
-    sale.customerPhone ? `  Phone    : ${sale.customerPhone}` : "",
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    "  Item                      Qty   Amount",
-    itemLines,
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    gst.gstAmount > 0 ? `  Subtotal :                     ₹${gst.taxable}` : "",
-    taxLine.trimEnd(),
-    `  Total    : ₹${sale.total}`,
-    `  Payment  : ${sale.payment}`,
-    `  Status   : ${sale.status}`,
-    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    "",
-    invoiceTerms ? invoiceTerms : "",
-    "",
-    "Thank you! Visit again 🙏",
-    `— ${bizName}`,
-  ].filter((l) => l !== null).join("\n");
 
-  const mailto = `mailto:${sale.customerEmail}?subject=${encodeURIComponent(`Your Bill from ${bizName} — ${sale.id}`)}&body=${encodeURIComponent(body)}`;
-  window.location.href = mailto;
+  const itemRows = sale.items.map((i) => `
+    <tr>
+      <td style="padding:14px 0;border-bottom:1px solid #e8e8e8;font-size:14px;color:#1a1a1a;font-weight:600">${i.productName}</td>
+      <td style="padding:14px 0;border-bottom:1px solid #e8e8e8;font-size:13px;color:#666;text-align:right">×${i.qty}</td>
+      <td style="padding:14px 0 14px 24px;border-bottom:1px solid #e8e8e8;font-size:14px;color:#1a1a1a;text-align:right;white-space:nowrap">₹${i.lineTotal.toLocaleString("en-IN")}</td>
+    </tr>`).join("");
+
+  const subtotalRows = gst.gstAmount > 0 ? `
+    <tr>
+      <td colspan="2" style="padding:10px 0 4px;text-align:right;font-size:13px;color:#888">Subtotal</td>
+      <td style="padding:10px 0 4px 24px;text-align:right;font-size:13px;color:#888">₹${gst.taxable.toLocaleString("en-IN")}</td>
+    </tr>
+    <tr>
+      <td colspan="2" style="padding:4px 0;text-align:right;font-size:13px;color:#888">${gst.rateLabel}</td>
+      <td style="padding:4px 0 4px 24px;text-align:right;font-size:13px;color:#888">₹${gst.gstAmount.toLocaleString("en-IN")}</td>
+    </tr>` : "";
+
+  const customerName = sale.customer !== "Walk-in" ? sale.customer : "Valued Customer";
+  const accentColor = "#2a7a5a";
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Receipt — ${sale.id}</title></head>
+<body style="margin:0;padding:0;background:#f0f0f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f0;padding:40px 0">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%">
+
+  <!-- Card -->
+  <tr><td style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+  <table width="100%" cellpadding="0" cellspacing="0">
+
+    <!-- Header -->
+    <tr>
+      <td style="padding:36px 48px 28px;border-bottom:1px solid #e8e8e8">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="font-size:22px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px">${bizName}</td>
+          <td style="text-align:right;font-size:13px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:1px">Receipt</td>
+        </tr></table>
+      </td>
+    </tr>
+
+    <!-- Meta -->
+    <tr>
+      <td style="padding:24px 48px 28px;border-bottom:1px solid #e8e8e8">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:top">
+            <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Prepared for</div>
+            <div style="font-size:18px;font-weight:700;color:#1a1a1a">${customerName}</div>
+            ${sale.customerPhone ? `<div style="font-size:13px;color:#888;margin-top:3px">${sale.customerPhone}</div>` : ""}
+          </td>
+          <td style="text-align:right;vertical-align:top">
+            <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Date</div>
+            <div style="font-size:16px;font-weight:700;color:#1a1a1a">${date}</div>
+            <div style="font-size:13px;color:#888;margin-top:3px">${time} &nbsp;·&nbsp; ${sale.id}</div>
+          </td>
+        </tr></table>
+      </td>
+    </tr>
+
+    <!-- Greeting -->
+    <tr>
+      <td style="padding:28px 48px;border-bottom:1px solid #e8e8e8">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:top;padding-right:24px">
+            <div style="font-size:17px;font-weight:700;color:${accentColor};margin-bottom:10px">We appreciate your business.</div>
+            <div style="font-size:13px;color:#666;line-height:1.6">
+              Thank you for shopping with us! A detailed summary of your purchase is below.
+              ${biz.email ? `If you have any questions, please email us at <a href="mailto:${biz.email}" style="color:${accentColor}">${biz.email}</a>.` : ""}
+            </div>
+          </td>
+          <td style="vertical-align:top;text-align:right;width:72px">
+            <div style="width:64px;height:64px;border-radius:50%;background:#f0f0f0;display:inline-flex;align-items:center;justify-content:center;font-size:28px">🛍️</div>
+          </td>
+        </tr></table>
+      </td>
+    </tr>
+
+    <!-- Invoice summary -->
+    <tr>
+      <td style="padding:28px 48px 0">
+        <div style="font-size:15px;font-weight:700;color:${accentColor};margin-bottom:16px">Invoice Summary</div>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <th style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:10px;border-bottom:2px solid #e8e8e8;text-align:left;font-weight:500">Description</th>
+            <th style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:10px;border-bottom:2px solid #e8e8e8;text-align:right;font-weight:500">Qty</th>
+            <th style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.8px;padding-bottom:10px;border-bottom:2px solid #e8e8e8;padding-left:24px;text-align:right;font-weight:500">Amount</th>
+          </tr>
+          ${itemRows}
+          ${subtotalRows}
+          <tr>
+            <td colspan="2" style="padding:16px 0 0;text-align:right;font-size:15px;font-weight:700;color:#1a1a1a;border-top:2px solid #1a1a1a">Total</td>
+            <td style="padding:16px 0 0 24px;text-align:right;font-size:15px;font-weight:700;color:#1a1a1a;border-top:2px solid #1a1a1a;white-space:nowrap">₹${sale.total.toLocaleString("en-IN")}</td>
+          </tr>
+          <tr>
+            <td colspan="3" style="padding:8px 0 28px">
+              <span style="font-size:12px;color:#aaa">Payment: ${sale.payment} &nbsp;·&nbsp; Status: ${sale.status}</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="padding:24px 48px 36px;border-top:1px solid #e8e8e8;background:#fafafa">
+        <div style="font-size:15px;font-weight:700;color:${accentColor};margin-bottom:8px">That's all.</div>
+        <div style="font-size:13px;color:#666;line-height:1.6">
+          ${invoiceTerms || "Thank you for your purchase. We hope to see you again soon!"}
+        </div>
+        ${biz.address ? `<div style="font-size:12px;color:#aaa;margin-top:12px">${biz.address}</div>` : ""}
+        ${biz.gstin ? `<div style="font-size:12px;color:#aaa">GSTIN: ${biz.gstin}</div>` : ""}
+      </td>
+    </tr>
+
+  </table>
+  </td></tr>
+  <!-- Bottom label -->
+  <tr><td style="padding:16px;text-align:center;font-size:11px;color:#aaa">
+    This receipt was generated by ${bizName} · ${date}
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+
+<!-- Open in mail button -->
+<div id="action-bar" style="position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 -2px 12px rgba(0,0,0,0.08)">
+  <span style="font-size:13px;color:#666">Save as PDF via File → Print, or open your mail app to send.</span>
+  <div style="display:flex;gap:10px">
+    <button onclick="window.print()" style="padding:9px 18px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:#333">🖨 Print / Save PDF</button>
+    <a href="mailto:${sale.customerEmail}?subject=${encodeURIComponent(`Your Receipt from ${bizName} — ${sale.id}`)}" style="padding:9px 18px;border:none;border-radius:6px;background:${accentColor};font-size:13px;font-weight:600;cursor:pointer;color:#fff;text-decoration:none">✉ Open Mail App</a>
+  </div>
+</div>
+<div style="height:70px"></div>
+<style>@media print { #action-bar { display:none!important; } body { background:#fff; } }</style>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=680,height=760");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
 }
 
 function printBill(sale: Sale, bizName: string, invoiceTerms: string) {

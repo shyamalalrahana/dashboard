@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Download,
+  Mail,
   Plus,
   Printer,
   Receipt,
@@ -88,6 +89,7 @@ type Sale = {
   id: string;
   customer: string;
   customerPhone: string;
+  customerEmail: string;
   items: SaleItem[];
   total: number;
   payment: RetailPayment;
@@ -131,7 +133,7 @@ function isToday(iso: string) {
 
 const initialSales: Sale[] = [
   {
-    id: "SAL-010", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
+    id: "SAL-010", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-26T10:25:00", total: 520,
     items: [
       { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 2, unitPrice: 180, lineTotal: 360 },
@@ -139,14 +141,14 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-009", customer: "Ravi Kumar", customerPhone: "9876543210", payment: "UPI", status: "Paid",
+    id: "SAL-009", customer: "Ravi Kumar", customerPhone: "9876543210", customerEmail: "ravi.kumar@email.com", payment: "UPI", status: "Paid",
     createdAt: "2026-06-26T09:48:00", total: 960,
     items: [
       { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 2, unitPrice: 480, lineTotal: 960 },
     ],
   },
   {
-    id: "SAL-008", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
+    id: "SAL-008", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-25T17:10:00", total: 490,
     items: [
       { productName: "Wheat Flour 10kg",     sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
@@ -154,7 +156,7 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-007", customer: "Priya S.", customerPhone: "9845001234", payment: "Card", status: "Paid",
+    id: "SAL-007", customer: "Priya S.", customerPhone: "9845001234", customerEmail: "priya.s@gmail.com", payment: "Card", status: "Paid",
     createdAt: "2026-06-25T15:30:00", total: 770,
     items: [
       { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
@@ -163,14 +165,14 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-006", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
+    id: "SAL-006", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-25T11:55:00", total: 540,
     items: [
       { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 3, unitPrice: 180, lineTotal: 540 },
     ],
   },
   {
-    id: "SAL-005", customer: "Meena Devi", customerPhone: "9900112233", payment: "UPI", status: "Paid",
+    id: "SAL-005", customer: "Meena Devi", customerPhone: "9900112233", customerEmail: "meena.devi@yahoo.com", payment: "UPI", status: "Paid",
     createdAt: "2026-06-24T16:20:00", total: 370,
     items: [
       { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 2, unitPrice: 130, lineTotal: 260 },
@@ -178,14 +180,14 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-004", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
+    id: "SAL-004", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-24T12:05:00", total: 760,
     items: [
       { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 2, unitPrice: 380, lineTotal: 760 },
     ],
   },
   {
-    id: "SAL-003", customer: "Suresh P.", customerPhone: "9812345678", payment: "UPI", status: "Paid",
+    id: "SAL-003", customer: "Suresh P.", customerPhone: "9812345678", customerEmail: "suresh.p@gmail.com", payment: "UPI", status: "Paid",
     createdAt: "2026-06-23T14:40:00", total: 980,
     items: [
       { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
@@ -194,7 +196,7 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-002", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Returned",
+    id: "SAL-002", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Returned",
     createdAt: "2026-06-22T10:15:00", total: 350,
     items: [
       { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 1, unitPrice: 130, lineTotal: 130 },
@@ -202,7 +204,7 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-001", customer: "Lakshmi A.", customerPhone: "9733221100", payment: "Card", status: "Paid",
+    id: "SAL-001", customer: "Lakshmi A.", customerPhone: "9733221100", customerEmail: "lakshmi.a@email.com", payment: "Card", status: "Paid",
     createdAt: "2026-06-22T09:30:00", total: 860,
     items: [
       { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
@@ -222,6 +224,7 @@ function SalesPage() {
   const [printSale, setPrintSale] = useState<Sale | null>(null);
   const [customer, setCustomer] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [payment, setPayment] = useState<RetailPayment>("Cash");
   const [formItems, setFormItems] = useState<FormItem[]>([emptyItem()]);
 
@@ -257,6 +260,7 @@ function SalesPage() {
   function resetForm() {
     setCustomer("");
     setCustomerPhone("");
+    setCustomerEmail("");
     setPayment("Cash");
     setFormItems([emptyItem()]);
   }
@@ -276,6 +280,7 @@ function SalesPage() {
       id: nextSaleId(),
       customer: customer.trim() || "Walk-in",
       customerPhone: customerPhone.trim(),
+      customerEmail: customerEmail.trim(),
       items: saleItems,
       total: saleItems.reduce((sum, i) => sum + i.lineTotal, 0),
       payment,
@@ -578,29 +583,20 @@ function SalesPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Customer */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>
-                  Customer Name{" "}
-                  <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-                </Label>
-                <Input
-                  placeholder="Walk-in customer"
-                  value={customer}
-                  onChange={(e) => setCustomer(e.target.value)}
-                />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Customer Name <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+                  <Input placeholder="Walk-in customer" value={customer} onChange={(e) => setCustomer(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Phone Number <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+                  <Input type="tel" placeholder="9876543210" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                </div>
               </div>
               <div className="space-y-1.5">
-                <Label>
-                  Phone Number{" "}
-                  <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-                </Label>
-                <Input
-                  type="tel"
-                  placeholder="9876543210"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                />
+                <Label>Email Address <span className="text-muted-foreground text-xs font-normal">(optional — to send bill)</span></Label>
+                <Input type="email" placeholder="customer@email.com" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
               </div>
             </div>
 
@@ -695,6 +691,35 @@ function SalesPage() {
   );
 }
 
+function sendBillEmail(sale: Sale) {
+  const { date, time } = fmtDT(sale.createdAt);
+  const itemLines = sale.items.map((i) => `  ${i.productName.padEnd(24)} x${i.qty}  ₹${i.lineTotal}`).join("\n");
+  const body = [
+    "Dear " + (sale.customer !== "Walk-in" ? sale.customer : "Customer") + ",",
+    "",
+    "Thank you for shopping with us! Here is your bill:",
+    "",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    `  Bill No  : ${sale.id}`,
+    `  Date     : ${date}  ${time}`,
+    sale.customerPhone ? `  Phone    : ${sale.customerPhone}` : "",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "  Item                      Qty   Amount",
+    itemLines,
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    `  Total    : ₹${sale.total}`,
+    `  Payment  : ${sale.payment}`,
+    `  Status   : ${sale.status}`,
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "",
+    "Thank you! Visit again 🙏",
+    "— ShopOS",
+  ].filter((l) => l !== null).join("\n");
+
+  const mailto = `mailto:${sale.customerEmail}?subject=${encodeURIComponent(`Your Bill from ShopOS — ${sale.id}`)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+}
+
 function printBill(sale: Sale) {
   const { date, time } = fmtDT(sale.createdAt);
   const rows = sale.items.map((i) =>
@@ -726,6 +751,7 @@ function printBill(sale: Sale) {
     <tr><td style="color:#555">Time</td><td style="text-align:right">${time}</td></tr>
     ${sale.customer !== "Walk-in" ? `<tr><td style="color:#555">Customer</td><td style="text-align:right">${sale.customer}</td></tr>` : ""}
     ${sale.customerPhone ? `<tr><td style="color:#555">Phone</td><td style="text-align:right">${sale.customerPhone}</td></tr>` : ""}
+    ${sale.customerEmail ? `<tr><td style="color:#555">Email</td><td style="text-align:right">${sale.customerEmail}</td></tr>` : ""}
   </tbody></table>
   <hr class="divider">
   <table><thead><tr>
@@ -772,6 +798,7 @@ function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
             <div className="flex justify-between"><span className="text-muted-foreground">Time</span><span>{time}</span></div>
             {sale.customer !== "Walk-in" && <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span>{sale.customer}</span></div>}
             {sale.customerPhone && <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span>{sale.customerPhone}</span></div>}
+            {sale.customerEmail && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{sale.customerEmail}</span></div>}
           </div>
           <div className="border-t border-dashed border-border" />
           <table className="w-full text-xs">
@@ -803,8 +830,13 @@ function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           <div className="border-t border-dashed border-border" />
           <p className="text-center text-xs text-muted-foreground">Thank you! Visit again 🙏</p>
         </div>
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
+          {sale.customerEmail && (
+            <Button variant="outline" className="gap-1.5" onClick={() => sendBillEmail(sale)}>
+              <Mail className="h-4 w-4" /> Send Email
+            </Button>
+          )}
           <Button className="gap-1.5" onClick={() => printBill(sale)}>
             <Printer className="h-4 w-4" /> Print Bill
           </Button>

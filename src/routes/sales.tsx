@@ -63,6 +63,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtINR, salesTrend, topProducts } from "@/lib/mock-data";
+import {
+  computeGST,
+  loadBusinessSettings,
+  loadInvoiceSettings,
+  loadTaxSettings,
+} from "@/lib/settings-store";
 
 export const Route = createFileRoute("/sales")({
   head: () => ({
@@ -217,6 +223,10 @@ type FormItem = { productName: string; sku: string; qty: string; unitPrice: numb
 const emptyItem = (): FormItem => ({ productName: "", sku: "", qty: "1", unitPrice: 0 });
 
 function SalesPage() {
+  const taxCfg      = loadTaxSettings();
+  const bizCfg      = loadBusinessSettings();
+  const invoiceCfg  = loadInvoiceSettings();
+
   const [sales, setSales] = useState<Sale[]>(initialSales);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -254,7 +264,9 @@ function SalesPage() {
     setFormItems((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  const runningTotal = formItems.reduce((sum, item) => sum + (Number(item.qty) || 0) * item.unitPrice, 0);
+  const subtotal    = formItems.reduce((sum, item) => sum + (Number(item.qty) || 0) * item.unitPrice, 0);
+  const gst         = computeGST(subtotal, taxCfg);
+  const runningTotal = gst.total;
   const canSubmit = formItems.some((item) => item.productName && Number(item.qty) > 0);
 
   function resetForm() {
@@ -276,13 +288,15 @@ function SalesPage() {
         unitPrice: item.unitPrice,
         lineTotal: Number(item.qty) * item.unitPrice,
       }));
+    const itemsSubtotal = saleItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    const saleGst = computeGST(itemsSubtotal, taxCfg);
     const newSale: Sale = {
       id: nextSaleId(),
       customer: customer.trim() || "Walk-in",
       customerPhone: customerPhone.trim(),
       customerEmail: customerEmail.trim(),
       items: saleItems,
-      total: saleItems.reduce((sum, i) => sum + i.lineTotal, 0),
+      total: saleGst.total,
       payment,
       status: "Paid",
       createdAt: new Date().toISOString(),
@@ -545,7 +559,13 @@ function SalesPage() {
 
       {/* Bill / Invoice Dialog */}
       {printSale && (
-        <BillDialog sale={printSale} onClose={() => setPrintSale(null)} />
+        <BillDialog
+          sale={printSale}
+          onClose={() => setPrintSale(null)}
+          taxCfg={taxCfg}
+          bizName={bizCfg.name}
+          invoiceTerms={invoiceCfg.terms}
+        />
       )}
 
       {/* Delete Confirmation */}
@@ -651,10 +671,25 @@ function SalesPage() {
             </div>
 
             {/* Running Total */}
-            {runningTotal > 0 && (
-              <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
-                <span className="text-sm font-medium">Total</span>
-                <span className="text-lg font-bold tabular-nums">{fmtINR(runningTotal)}</span>
+            {subtotal > 0 && (
+              <div className="rounded-lg bg-muted/50 px-4 py-3 space-y-1.5">
+                {gst.gstAmount > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">{fmtINR(gst.taxable)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>{gst.rateLabel}</span>
+                      <span className="tabular-nums">+ {fmtINR(gst.gstAmount)}</span>
+                    </div>
+                    <div className="border-t border-border/60 pt-1.5" />
+                  </>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Total</span>
+                  <span className="text-lg font-bold tabular-nums">{fmtINR(runningTotal)}</span>
+                </div>
               </div>
             )}
 
@@ -691,13 +726,19 @@ function SalesPage() {
   );
 }
 
-function sendBillEmail(sale: Sale) {
+function sendBillEmail(sale: Sale, bizName: string, invoiceTerms: string) {
+  const taxCfg = loadTaxSettings();
   const { date, time } = fmtDT(sale.createdAt);
+  const subtotal = sale.items.reduce((s, i) => s + i.lineTotal, 0);
+  const gst = computeGST(subtotal, taxCfg);
   const itemLines = sale.items.map((i) => `  ${i.productName.padEnd(24)} x${i.qty}  ₹${i.lineTotal}`).join("\n");
+  const taxLine = gst.gstAmount > 0
+    ? `  ${gst.rateLabel.padEnd(20)}        ₹${gst.gstAmount}\n`
+    : "";
   const body = [
     "Dear " + (sale.customer !== "Walk-in" ? sale.customer : "Customer") + ",",
     "",
-    "Thank you for shopping with us! Here is your bill:",
+    `Thank you for shopping at ${bizName}! Here is your bill:`,
     "",
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     `  Bill No  : ${sale.id}`,
@@ -707,21 +748,29 @@ function sendBillEmail(sale: Sale) {
     "  Item                      Qty   Amount",
     itemLines,
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    gst.gstAmount > 0 ? `  Subtotal :                     ₹${gst.taxable}` : "",
+    taxLine.trimEnd(),
     `  Total    : ₹${sale.total}`,
     `  Payment  : ${sale.payment}`,
     `  Status   : ${sale.status}`,
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     "",
+    invoiceTerms ? invoiceTerms : "",
+    "",
     "Thank you! Visit again 🙏",
-    "— ShopOS",
+    `— ${bizName}`,
   ].filter((l) => l !== null).join("\n");
 
-  const mailto = `mailto:${sale.customerEmail}?subject=${encodeURIComponent(`Your Bill from ShopOS — ${sale.id}`)}&body=${encodeURIComponent(body)}`;
+  const mailto = `mailto:${sale.customerEmail}?subject=${encodeURIComponent(`Your Bill from ${bizName} — ${sale.id}`)}&body=${encodeURIComponent(body)}`;
   window.location.href = mailto;
 }
 
-function printBill(sale: Sale) {
+function printBill(sale: Sale, bizName: string, invoiceTerms: string) {
+  const taxCfg = loadTaxSettings();
+  const biz    = loadBusinessSettings();
   const { date, time } = fmtDT(sale.createdAt);
+  const subtotal = sale.items.reduce((s, i) => s + i.lineTotal, 0);
+  const gst = computeGST(subtotal, taxCfg);
   const rows = sale.items.map((i) =>
     `<tr>
       <td style="padding:4px 8px 4px 0;border-bottom:1px solid #e5e7eb">${i.productName}</td>
@@ -730,6 +779,17 @@ function printBill(sale: Sale) {
       <td style="padding:4px 0 4px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">₹${i.lineTotal}</td>
     </tr>`
   ).join("");
+
+  const taxRows = gst.gstAmount > 0 ? `
+    <tr><td style="color:#555">Subtotal</td><td style="text-align:right">₹${gst.taxable}</td></tr>
+    <tr><td style="color:#555">${gst.rateLabel}</td><td style="text-align:right">₹${gst.gstAmount}</td></tr>
+  ` : "";
+
+  const termsHtml = invoiceTerms
+    ? `<hr class="divider"><div style="font-size:10px;color:#888;margin-top:4px">${invoiceTerms}</div>`
+    : "";
+
+  const gstin = biz.gstin ? `<div style="font-size:10px;color:#555">GSTIN: ${biz.gstin}</div>` : "";
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bill ${sale.id}</title>
   <style>
@@ -741,8 +801,11 @@ function printBill(sale: Sale) {
     @media print { body { padding: 8px; } }
   </style></head><body>
   <div class="center" style="margin-bottom:12px">
-    <div style="font-size:18px;font-weight:700;letter-spacing:1px">ShopOS</div>
+    <div style="font-size:18px;font-weight:700;letter-spacing:1px">${bizName}</div>
     <div style="font-size:11px;color:#555">Counter Bill / Tax Invoice</div>
+    ${gstin}
+    ${biz.phone ? `<div style="font-size:10px;color:#555">${biz.phone}</div>` : ""}
+    ${biz.address ? `<div style="font-size:10px;color:#555">${biz.address}</div>` : ""}
   </div>
   <hr class="divider">
   <table style="margin-bottom:8px"><tbody>
@@ -759,10 +822,12 @@ function printBill(sale: Sale) {
   </tr></thead><tbody>${rows}</tbody></table>
   <hr class="divider">
   <table><tbody>
+    ${taxRows}
     <tr><td style="font-size:15px;font-weight:700">Total</td><td style="text-align:right;font-size:15px;font-weight:700">₹${sale.total}</td></tr>
     <tr><td style="color:#555">Payment</td><td style="text-align:right">${sale.payment}</td></tr>
     <tr><td style="color:#555">Status</td><td style="text-align:right">${sale.status}</td></tr>
   </tbody></table>
+  ${termsHtml}
   <hr class="divider">
   <div class="center" style="font-size:12px;color:#555;margin-top:8px">Thank you! Visit again 🙏</div>
   </body></html>`;
@@ -775,8 +840,18 @@ function printBill(sale: Sale) {
   win.print();
 }
 
-function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
+function BillDialog({
+  sale, onClose, taxCfg, bizName, invoiceTerms,
+}: {
+  sale: Sale;
+  onClose: () => void;
+  taxCfg: ReturnType<typeof loadTaxSettings>;
+  bizName: string;
+  invoiceTerms: string;
+}) {
   const { date, time } = fmtDT(sale.createdAt);
+  const subtotal = sale.items.reduce((s, i) => s + i.lineTotal, 0);
+  const gst = computeGST(subtotal, taxCfg);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
@@ -788,7 +863,7 @@ function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
         {/* Bill preview */}
         <div className="rounded-lg border border-dashed border-border bg-muted/20 p-5 font-mono text-sm space-y-3">
           <div className="text-center space-y-0.5">
-            <p className="text-base font-bold tracking-widest">ShopOS</p>
+            <p className="text-base font-bold tracking-widest">{bizName}</p>
             <p className="text-xs text-muted-foreground">Counter Bill / Tax Invoice</p>
           </div>
           <div className="border-t border-dashed border-border" />
@@ -798,7 +873,7 @@ function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
             <div className="flex justify-between"><span className="text-muted-foreground">Time</span><span>{time}</span></div>
             {sale.customer !== "Walk-in" && <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span>{sale.customer}</span></div>}
             {sale.customerPhone && <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span>{sale.customerPhone}</span></div>}
-            {sale.customerEmail && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{sale.customerEmail}</span></div>}
+            {sale.customerEmail && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="truncate max-w-[150px]">{sale.customerEmail}</span></div>}
           </div>
           <div className="border-t border-dashed border-border" />
           <table className="w-full text-xs">
@@ -823,21 +898,33 @@ function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
           </table>
           <div className="border-t border-dashed border-border" />
           <div className="space-y-1 text-xs">
+            {gst.gstAmount > 0 && (
+              <>
+                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>₹{gst.taxable}</span></div>
+                <div className="flex justify-between text-muted-foreground"><span>{gst.rateLabel}</span><span>₹{gst.gstAmount}</span></div>
+              </>
+            )}
             <div className="flex justify-between text-base font-bold"><span>Total</span><span>{fmtINR(sale.total)}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><span>{sale.payment}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span>{sale.status}</span></div>
           </div>
+          {invoiceTerms && (
+            <>
+              <div className="border-t border-dashed border-border" />
+              <p className="text-[10px] text-muted-foreground leading-relaxed">{invoiceTerms}</p>
+            </>
+          )}
           <div className="border-t border-dashed border-border" />
           <p className="text-center text-xs text-muted-foreground">Thank you! Visit again 🙏</p>
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
           {sale.customerEmail && (
-            <Button variant="outline" className="gap-1.5" onClick={() => sendBillEmail(sale)}>
+            <Button variant="outline" className="gap-1.5" onClick={() => sendBillEmail(sale, bizName, invoiceTerms)}>
               <Mail className="h-4 w-4" /> Send Email
             </Button>
           )}
-          <Button className="gap-1.5" onClick={() => printBill(sale)}>
+          <Button className="gap-1.5" onClick={() => printBill(sale, bizName, invoiceTerms)}>
             <Printer className="h-4 w-4" /> Print Bill
           </Button>
         </DialogFooter>

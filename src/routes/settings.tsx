@@ -14,6 +14,11 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  loadSettings,
+  saveSettings,
+} from "@/lib/settings-store";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,63 +84,16 @@ const NAV_GROUPS: { label: string; items: { key: SectionKey; icon: React.Compone
 function SettingsPage() {
   const [section, setSection] = useState<SectionKey>("business");
 
-  const [business, setBusiness] = useState({
-    name: "My Business",
-    type: "Retail",
-    gstin: "27ABCDE1234F1Z5",
-    phone: "+91 20 2712 4500",
-    email: "accounts@vaidyaayur.in",
-    address: "Plot 14, MIDC, Pune 411019",
-    country: "India",
-    currency: "INR",
-    timezone: "Asia/Kolkata",
-    language: "English",
-  });
-
-  const [financial, setFinancial] = useState({
-    fyStart: "April",
-    currency: "INR",
-    decimal: "2",
-  });
-
-  const [taxes, setTaxes] = useState({
-    gstEnabled: true,
-    gstin: "27ABCDE1234F1Z5",
-    defaultRate: "18",
-    taxMode: "Exclusive",
-    returnFreq: "Monthly",
-    hsnRequired: true,
-  });
-
-  const [invoice, setInvoice] = useState({
-    prefix: "INV-",
-    nextNumber: "2042",
-    format: "A4",
-    terms: "Goods once sold will not be returned. Payment due within 30 days.",
-    qrCode: true,
-    signature: false,
-  });
-
-  const [inventory, setInventory] = useState({
-    lowStockThreshold: "20",
-    allowNegative: false,
-    barcodeAuto: true,
-    expiryTracking: true,
-    batchTracking: true,
-  });
-
-  const [notifs, setNotifs] = useState({
-    email: true,
-    sms: false,
-    whatsapp: false,
-    lowStock: true,
-    batchExpiry: true,
-    dailySummary: true,
-    weeklyReport: true,
-    gstAutoReport: false,
-  });
+  const stored = loadSettings();
+  const [business, setBusiness]   = useState(stored.business);
+  const [financial, setFinancial] = useState(stored.financial);
+  const [taxes, setTaxes]         = useState(stored.taxes);
+  const [invoice, setInvoice]     = useState(stored.invoice);
+  const [inventory, setInventory] = useState(stored.inventory);
+  const [notifs, setNotifs]       = useState(stored.notifs);
 
   function save() {
+    saveSettings({ business, financial, taxes, invoice, inventory, notifs });
     toast.success("Settings saved", { description: "Your changes have been applied." });
   }
 

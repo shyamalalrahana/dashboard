@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Package, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, Package, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -107,6 +107,10 @@ export function ProductsPage() {
   const [open, setOpen] = useState(false);
   const [editItem, setEditItem] = useState<Product | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [stockInOpen, setStockInOpen] = useState(false);
+  const [stockInProductId, setStockInProductId] = useState("");
+  const [stockInQty, setStockInQty] = useState("");
+  const [stockInRef, setStockInRef] = useState("");
   const [editForm, setEditForm] = useState({ name: "", category: "Grocery", sku: "", mrp: "", costPrice: "", qty: "", unit: "pkt", expiryDate: "", status: "Active" as Product["status"] });
   const [form, setForm] = useState({
     name: "", category: "Grocery", sku: "", mrp: "", costPrice: "",
@@ -135,6 +139,26 @@ export function ProductsPage() {
     setEditItem(null);
     toast.success("Product updated");
   }
+  function openStockIn(productId = "") {
+    setStockInProductId(productId);
+    setStockInQty("");
+    setStockInRef("");
+    setStockInOpen(true);
+  }
+  function handleStockIn() {
+    const product = products.find((p) => p.id === stockInProductId);
+    if (!product || !stockInQty || Number(stockInQty) <= 0) return;
+    const added = Number(stockInQty);
+    const newQty = product.qty + added;
+    setProducts(products.map((p) =>
+      p.id === product.id ? { ...p, qty: newQty } : p
+    ));
+    toast.success("Stock added", {
+      description: `+${added} ${product.unit} · ${product.name} · New total: ${newQty}`,
+    });
+    setStockInOpen(false);
+  }
+
   function handleDelete() {
     if (!deleteId) return;
     setProducts(products.filter((p) => p.id !== deleteId));
@@ -168,9 +192,14 @@ export function ProductsPage() {
       title="Products"
       description="Manage your product catalogue — pricing, stock, and expiry dates."
       actions={
-        <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" /> Add Product
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openStockIn()}>
+            <ArrowUpCircle className="h-4 w-4 text-success" /> Stock In
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" /> Add Product
+          </Button>
+        </div>
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -228,7 +257,7 @@ export function ProductsPage() {
                 <TableHead>Expiry Date</TableHead>
                 <TableHead>Added On</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-16" />
+                <TableHead className="w-40" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -278,6 +307,9 @@ export function ProductsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-success hover:text-success hover:bg-success/10" onClick={() => openStockIn(p.id)}>
+                          <ArrowUpCircle className="h-3.5 w-3.5" /> Stock In
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -373,6 +405,77 @@ export function ProductsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* ── Stock In Dialog ── */}
+      <Dialog open={stockInOpen} onOpenChange={(o) => !o && setStockInOpen(false)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowUpCircle className="h-4 w-4 text-success" /> Add Stock
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Product <span className="text-destructive">*</span></Label>
+              <Select value={stockInProductId} onValueChange={setStockInProductId}>
+                <SelectTrigger><SelectValue placeholder="Select product…" /></SelectTrigger>
+                <SelectContent>
+                  {products.filter((p) => p.status === "Active").map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                      <span className="text-muted-foreground ml-1.5 text-xs">({p.qty} {p.unit})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Quantity to Add <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 50"
+                  value={stockInQty}
+                  onChange={(e) => setStockInQty(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Reference <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
+                <Input
+                  placeholder="Supplier, PO number…"
+                  value={stockInRef}
+                  onChange={(e) => setStockInRef(e.target.value)}
+                />
+              </div>
+            </div>
+            {/* Live balance preview */}
+            {stockInProductId && stockInQty && Number(stockInQty) > 0 && (() => {
+              const p = products.find((pr) => pr.id === stockInProductId);
+              if (!p) return null;
+              return (
+                <div className="rounded-lg bg-success/10 border border-success/20 px-3 py-2.5 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">New stock total</span>
+                  <span className="font-semibold text-success">
+                    {p.qty} + {Number(stockInQty)} = <strong>{p.qty + Number(stockInQty)}</strong> {p.unit}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStockInOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleStockIn}
+              disabled={!stockInProductId || !stockInQty || Number(stockInQty) <= 0}
+            >
+              Add Stock
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Product Dialog ── */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>

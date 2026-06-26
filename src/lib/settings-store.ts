@@ -12,6 +12,7 @@ export type BusinessSettings = {
   currency: string;
   timezone: string;
   language: string;
+  logoUrl: string;   // base64 data-URL or ""
 };
 
 export type FinancialSettings = {
@@ -94,6 +95,7 @@ const DEFAULTS: AllSettings = {
     currency: "INR",
     timezone: "Asia/Kolkata",
     language: "English",
+    logoUrl: "",
   },
   financial: {
     fyStart: "April",

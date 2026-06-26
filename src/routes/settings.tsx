@@ -12,7 +12,7 @@ import {
   Shield,
   Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -179,20 +179,7 @@ function BusinessSection({
       <SectionHeader title="Business" description="Your shop's legal identity, contact details, and regional settings." />
 
       {/* Logo */}
-      <div className="space-y-2">
-        <Label>Business Logo</Label>
-        <div className="flex items-center gap-4">
-          <div className="h-16 w-16 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-muted/20">
-            <Building2 className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <Upload className="h-3.5 w-3.5" /> Upload Logo
-            </Button>
-            <p className="text-xs text-muted-foreground mt-1">PNG or JPG · Max 2 MB · Appears on invoices</p>
-          </div>
-        </div>
-      </div>
+      <LogoUpload logoUrl={s.logoUrl} onChange={(url) => setS({ ...s, logoUrl: url })} />
 
       <Separator />
 
@@ -892,6 +879,68 @@ function SubscriptionSection() {
 }
 
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Logo upload
+// ─────────────────────────────────────────────
+function LogoUpload({ logoUrl, onChange }: { logoUrl: string; onChange: (url: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File too large. Max 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>Business Logo</Label>
+      <div className="flex items-center gap-4">
+        {/* Preview */}
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="h-16 w-16 rounded-xl border-2 border-dashed border-border flex items-center justify-center bg-muted/20 overflow-hidden hover:border-primary/60 transition-colors"
+          title="Click to upload logo"
+        >
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="h-full w-full object-contain" />
+          ) : (
+            <Building2 className="h-6 w-6 text-muted-foreground" />
+          )}
+        </button>
+
+        <div className="space-y-1.5">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => inputRef.current?.click()}>
+              <Upload className="h-3.5 w-3.5" /> {logoUrl ? "Change Logo" : "Upload Logo"}
+            </Button>
+            {logoUrl && (
+              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => onChange("")}>
+                Remove
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">PNG or JPG · Max 2 MB · Appears on invoices & bill emails</p>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={handleFile}
+        />
+      </div>
+    </div>
+  );
+}
+
 // Shared helpers
 // ─────────────────────────────────────────────
 function SectionHeader({ title, description }: { title: string; description?: string }) {

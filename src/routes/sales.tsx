@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Download,
   Plus,
+  Printer,
   Receipt,
   Search,
   ShoppingBag,
@@ -218,6 +219,7 @@ function SalesPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [printSale, setPrintSale] = useState<Sale | null>(null);
   const [customer, setCustomer] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [payment, setPayment] = useState<RetailPayment>("Cash");
@@ -283,6 +285,7 @@ function SalesPage() {
     setSales((prev) => [newSale, ...prev]);
     resetForm();
     setOpen(false);
+    setPrintSale(newSale);
     toast.success("Sale recorded", { description: `${newSale.id} · ${fmtINR(newSale.total)}` });
   }
 
@@ -509,13 +512,22 @@ function SalesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteId(s.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => setPrintSale(s)}
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteId(s.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -525,6 +537,11 @@ function SalesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Bill / Invoice Dialog */}
+      {printSale && (
+        <BillDialog sale={printSale} onClose={() => setPrintSale(null)} />
+      )}
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
@@ -675,6 +692,125 @@ function SalesPage() {
         </DialogContent>
       </Dialog>
     </PageShell>
+  );
+}
+
+function printBill(sale: Sale) {
+  const { date, time } = fmtDT(sale.createdAt);
+  const rows = sale.items.map((i) =>
+    `<tr>
+      <td style="padding:4px 8px 4px 0;border-bottom:1px solid #e5e7eb">${i.productName}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${i.qty}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;text-align:right">₹${i.unitPrice}</td>
+      <td style="padding:4px 0 4px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600">₹${i.lineTotal}</td>
+    </tr>`
+  ).join("");
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bill ${sale.id}</title>
+  <style>
+    body { font-family: 'Courier New', monospace; font-size: 13px; color: #111; margin: 0; padding: 24px; max-width: 320px; }
+    .center { text-align: center; }
+    .divider { border: none; border-top: 1px dashed #aaa; margin: 10px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 4px 8px 4px 0; font-size: 11px; text-transform: uppercase; color: #555; }
+    @media print { body { padding: 8px; } }
+  </style></head><body>
+  <div class="center" style="margin-bottom:12px">
+    <div style="font-size:18px;font-weight:700;letter-spacing:1px">ShopOS</div>
+    <div style="font-size:11px;color:#555">Counter Bill / Tax Invoice</div>
+  </div>
+  <hr class="divider">
+  <table style="margin-bottom:8px"><tbody>
+    <tr><td style="color:#555">Bill No</td><td style="text-align:right;font-weight:700">${sale.id}</td></tr>
+    <tr><td style="color:#555">Date</td><td style="text-align:right">${date}</td></tr>
+    <tr><td style="color:#555">Time</td><td style="text-align:right">${time}</td></tr>
+    ${sale.customer !== "Walk-in" ? `<tr><td style="color:#555">Customer</td><td style="text-align:right">${sale.customer}</td></tr>` : ""}
+    ${sale.customerPhone ? `<tr><td style="color:#555">Phone</td><td style="text-align:right">${sale.customerPhone}</td></tr>` : ""}
+  </tbody></table>
+  <hr class="divider">
+  <table><thead><tr>
+    <th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amt</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  <hr class="divider">
+  <table><tbody>
+    <tr><td style="font-size:15px;font-weight:700">Total</td><td style="text-align:right;font-size:15px;font-weight:700">₹${sale.total}</td></tr>
+    <tr><td style="color:#555">Payment</td><td style="text-align:right">${sale.payment}</td></tr>
+    <tr><td style="color:#555">Status</td><td style="text-align:right">${sale.status}</td></tr>
+  </tbody></table>
+  <hr class="divider">
+  <div class="center" style="font-size:12px;color:#555;margin-top:8px">Thank you! Visit again 🙏</div>
+  </body></html>`;
+
+  const win = window.open("", "_blank", "width=400,height=600");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function BillDialog({ sale, onClose }: { sale: Sale; onClose: () => void }) {
+  const { date, time } = fmtDT(sale.createdAt);
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Receipt className="h-4 w-4" /> Bill Preview — {sale.id}
+          </DialogTitle>
+        </DialogHeader>
+        {/* Bill preview */}
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 p-5 font-mono text-sm space-y-3">
+          <div className="text-center space-y-0.5">
+            <p className="text-base font-bold tracking-widest">ShopOS</p>
+            <p className="text-xs text-muted-foreground">Counter Bill / Tax Invoice</p>
+          </div>
+          <div className="border-t border-dashed border-border" />
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between"><span className="text-muted-foreground">Bill No</span><span className="font-bold">{sale.id}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{date}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Time</span><span>{time}</span></div>
+            {sale.customer !== "Walk-in" && <div className="flex justify-between"><span className="text-muted-foreground">Customer</span><span>{sale.customer}</span></div>}
+            {sale.customerPhone && <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span>{sale.customerPhone}</span></div>}
+          </div>
+          <div className="border-t border-dashed border-border" />
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="text-left pb-1">Item</th>
+                <th className="text-center pb-1">Qty</th>
+                <th className="text-right pb-1">Rate</th>
+                <th className="text-right pb-1">Amt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sale.items.map((i, idx) => (
+                <tr key={idx} className="border-t border-border/40">
+                  <td className="py-0.5 pr-2 truncate max-w-[110px]">{i.productName}</td>
+                  <td className="py-0.5 text-center">{i.qty}</td>
+                  <td className="py-0.5 text-right text-muted-foreground">₹{i.unitPrice}</td>
+                  <td className="py-0.5 text-right font-semibold">₹{i.lineTotal}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="border-t border-dashed border-border" />
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between text-base font-bold"><span>Total</span><span>{fmtINR(sale.total)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Payment</span><span>{sale.payment}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span>{sale.status}</span></div>
+          </div>
+          <div className="border-t border-dashed border-border" />
+          <p className="text-center text-xs text-muted-foreground">Thank you! Visit again 🙏</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button className="gap-1.5" onClick={() => printBill(sale)}>
+            <Printer className="h-4 w-4" /> Print Bill
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

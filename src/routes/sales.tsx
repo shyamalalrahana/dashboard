@@ -2,14 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Download,
-  Pencil,
   Plus,
+  Receipt,
   Search,
-  ShoppingCart,
-  Trash2,
+  ShoppingBag,
   TrendingUp,
-  Users,
-  Wallet,
+  Trash2,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import {
@@ -61,158 +60,253 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  customers,
-  fmtINR,
-  salesOverview,
-  salesTrend,
-  topProducts,
-} from "@/lib/mock-data";
+import { fmtINR, salesTrend, topProducts } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/sales")({
   head: () => ({
     meta: [
       { title: "Sales · ShopOS" },
-      { name: "description", content: "Manage sales entries, invoices and customers." },
+      { name: "description", content: "Retail counter sales — products sold directly to walk-in customers." },
     ],
   }),
   component: SalesPage,
 });
 
-type PaymentMethod = "Cash" | "UPI" | "Bank Transfer" | "Cheque" | "Credit";
+type RetailPayment = "Cash" | "UPI" | "Card";
+type SaleStatus = "Paid" | "Returned";
+
+type SaleItem = {
+  productName: string;
+  sku: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+};
 
 type Sale = {
   id: string;
   customer: string;
-  date: string;       // YYYY-MM-DD
-  createdAt: string;  // ISO timestamp for display
-  amount: number;
-  profit: number;
-  status: "Paid" | "Pending" | "Overdue";
-  paymentMethod: PaymentMethod;
-  dueDate: string;
+  items: SaleItem[];
+  total: number;
+  payment: RetailPayment;
+  status: SaleStatus;
+  createdAt: string;
 };
 
-const initialSales: Sale[] = [
-  { id: "INV-2041", customer: "City Mart",           date: "2026-06-26", createdAt: "2026-06-26T10:12:00", amount: 18400, profit: 5520,  status: "Paid",    paymentMethod: "UPI",           dueDate: "2026-06-26" },
-  { id: "INV-2040", customer: "Metro General Store",  date: "2026-06-25", createdAt: "2026-06-25T14:33:00", amount: 22000, profit: 7040,  status: "Pending", paymentMethod: "Credit",        dueDate: "2026-07-05" },
-  { id: "INV-2039", customer: "Fresh Daily Stores",   date: "2026-06-24", createdAt: "2026-06-24T09:50:00", amount: 14000, profit: 4200,  status: "Pending", paymentMethod: "Bank Transfer", dueDate: "2026-07-01" },
-  { id: "INV-2038", customer: "Raja Wholesale",       date: "2026-06-23", createdAt: "2026-06-23T11:15:00", amount: 31500, profit: 9450,  status: "Paid",    paymentMethod: "Cheque",        dueDate: "2026-06-23" },
-  { id: "INV-2037", customer: "Star Supermarket",     date: "2026-06-22", createdAt: "2026-06-22T16:05:00", amount: 9800,  profit: 2940,  status: "Paid",    paymentMethod: "Cash",          dueDate: "2026-06-22" },
-  { id: "INV-2036", customer: "Sunrise Stores",       date: "2026-06-20", createdAt: "2026-06-20T08:40:00", amount: 27000, profit: 8100,  status: "Overdue", paymentMethod: "Credit",        dueDate: "2026-06-15" },
-  { id: "INV-2035", customer: "City Mart",            date: "2026-06-18", createdAt: "2026-06-18T13:22:00", amount: 16500, profit: 4950,  status: "Paid",    paymentMethod: "UPI",           dueDate: "2026-06-18" },
-  { id: "INV-2034", customer: "Green Valley Foods",   date: "2026-06-17", createdAt: "2026-06-17T10:58:00", amount: 42000, profit: 12600, status: "Overdue", paymentMethod: "Cheque",        dueDate: "2026-06-10" },
-  { id: "INV-2033", customer: "Metro General Store",  date: "2026-06-15", createdAt: "2026-06-15T15:45:00", amount: 19800, profit: 5940,  status: "Paid",    paymentMethod: "Bank Transfer", dueDate: "2026-06-15" },
-  { id: "INV-2032", customer: "Raja Wholesale",       date: "2026-06-12", createdAt: "2026-06-12T09:30:00", amount: 35000, profit: 10500, status: "Paid",    paymentMethod: "Cheque",        dueDate: "2026-06-12" },
+const RETAIL_PRODUCTS = [
+  { name: "Sunflower Oil 1L",     sku: "SOL-001", mrp: 180 },
+  { name: "Basmati Rice 5kg",     sku: "BRS-005", mrp: 480 },
+  { name: "Wheat Flour 10kg",     sku: "WFL-010", mrp: 380 },
+  { name: "Shampoo 200ml",        sku: "SHP-200", mrp: 130 },
+  { name: "Detergent Powder 1kg", sku: "DTP-001", mrp: 110 },
+  { name: "Toor Dal 1kg",         sku: "TDL-001", mrp: 160 },
 ];
 
-const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "UPI", "Bank Transfer", "Cheque", "Credit"];
-
-const STATUS_STYLES: Record<Sale["status"], string> = {
-  Paid:    "bg-success/15 text-success border-transparent",
-  Pending: "border-warning/40 text-warning",
-  Overdue: "bg-destructive/10 text-destructive border-destructive/30",
+const STATUS_STYLES: Record<SaleStatus, string> = {
+  Paid:     "bg-success/15 text-success border-transparent",
+  Returned: "bg-destructive/10 text-destructive border-destructive/30",
 };
 
-const TOP_CUSTOMERS = [
-  { name: "Raja Wholesale",      totalSpend: 148000, orders: 24 },
-  { name: "City Mart",           totalSpend: 112000, orders: 18 },
-  { name: "Metro General Store", totalSpend:  98000, orders: 15 },
-  { name: "Green Valley Foods",  totalSpend:  74000, orders: 11 },
-];
+let saleCounter = 11;
+function nextSaleId() { return `SAL-${String(saleCounter++).padStart(3, "0")}`; }
 
+function fmtDT(iso: string) {
+  const d = new Date(iso);
+  return {
+    date: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+    time: d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+  };
+}
 function fmtINRCompact(n: number) {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-  if (n >= 1000) return `₹${(n / 1000).toFixed(0)}K`;
+  if (n >= 1000)   return `₹${(n / 1000).toFixed(0)}K`;
   return `₹${n}`;
 }
+function isToday(iso: string) {
+  const d = new Date(iso), now = new Date();
+  return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+}
+
+const initialSales: Sale[] = [
+  {
+    id: "SAL-010", customer: "Walk-in", payment: "Cash", status: "Paid",
+    createdAt: "2026-06-26T10:25:00", total: 520,
+    items: [
+      { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 2, unitPrice: 180, lineTotal: 360 },
+      { productName: "Toor Dal 1kg",     sku: "TDL-001", qty: 1, unitPrice: 160, lineTotal: 160 },
+    ],
+  },
+  {
+    id: "SAL-009", customer: "Ravi Kumar", payment: "UPI", status: "Paid",
+    createdAt: "2026-06-26T09:48:00", total: 960,
+    items: [
+      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 2, unitPrice: 480, lineTotal: 960 },
+    ],
+  },
+  {
+    id: "SAL-008", customer: "Walk-in", payment: "Cash", status: "Paid",
+    createdAt: "2026-06-25T17:10:00", total: 490,
+    items: [
+      { productName: "Wheat Flour 10kg",     sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
+      { productName: "Detergent Powder 1kg", sku: "DTP-001", qty: 1, unitPrice: 110, lineTotal: 110 },
+    ],
+  },
+  {
+    id: "SAL-007", customer: "Priya S.", payment: "Card", status: "Paid",
+    createdAt: "2026-06-25T15:30:00", total: 770,
+    items: [
+      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
+      { productName: "Shampoo 200ml",    sku: "SHP-200", qty: 1, unitPrice: 130, lineTotal: 130 },
+      { productName: "Toor Dal 1kg",     sku: "TDL-001", qty: 1, unitPrice: 160, lineTotal: 160 },
+    ],
+  },
+  {
+    id: "SAL-006", customer: "Walk-in", payment: "Cash", status: "Paid",
+    createdAt: "2026-06-25T11:55:00", total: 540,
+    items: [
+      { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 3, unitPrice: 180, lineTotal: 540 },
+    ],
+  },
+  {
+    id: "SAL-005", customer: "Meena Devi", payment: "UPI", status: "Paid",
+    createdAt: "2026-06-24T16:20:00", total: 370,
+    items: [
+      { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 2, unitPrice: 130, lineTotal: 260 },
+      { productName: "Detergent Powder 1kg", sku: "DTP-001", qty: 1, unitPrice: 110, lineTotal: 110 },
+    ],
+  },
+  {
+    id: "SAL-004", customer: "Walk-in", payment: "Cash", status: "Paid",
+    createdAt: "2026-06-24T12:05:00", total: 760,
+    items: [
+      { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 2, unitPrice: 380, lineTotal: 760 },
+    ],
+  },
+  {
+    id: "SAL-003", customer: "Suresh P.", payment: "UPI", status: "Paid",
+    createdAt: "2026-06-23T14:40:00", total: 980,
+    items: [
+      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
+      { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 1, unitPrice: 180, lineTotal: 180 },
+      { productName: "Toor Dal 1kg",     sku: "TDL-001", qty: 2, unitPrice: 160, lineTotal: 320 },
+    ],
+  },
+  {
+    id: "SAL-002", customer: "Walk-in", payment: "Cash", status: "Returned",
+    createdAt: "2026-06-22T10:15:00", total: 350,
+    items: [
+      { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 1, unitPrice: 130, lineTotal: 130 },
+      { productName: "Detergent Powder 1kg", sku: "DTP-001", qty: 2, unitPrice: 110, lineTotal: 220 },
+    ],
+  },
+  {
+    id: "SAL-001", customer: "Lakshmi A.", payment: "Card", status: "Paid",
+    createdAt: "2026-06-22T09:30:00", total: 860,
+    items: [
+      { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
+      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
+    ],
+  },
+];
+
+type FormItem = { productName: string; sku: string; qty: string; unitPrice: number };
+const emptyItem = (): FormItem => ({ productName: "", sku: "", qty: "1", unitPrice: 0 });
 
 function SalesPage() {
   const [sales, setSales] = useState<Sale[]>(initialSales);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [open, setOpen] = useState(false);
-  const [editItem, setEditItem] = useState<Sale | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    customer: "",
-    amount: "",
-    status: "Paid" as Sale["status"],
-    paymentMethod: "Cash" as PaymentMethod,
-    dueDate: new Date().toISOString().slice(0, 10),
-  });
-  const [editForm, setEditForm] = useState({
-    customer: "",
-    amount: "",
-    status: "Paid" as Sale["status"],
-    paymentMethod: "Cash" as PaymentMethod,
-    dueDate: "",
-  });
+  const [customer, setCustomer] = useState("");
+  const [payment, setPayment] = useState<RetailPayment>("Cash");
+  const [formItems, setFormItems] = useState<FormItem[]>([emptyItem()]);
 
   const filtered = sales.filter((s) => {
     const q = search.toLowerCase();
-    const matchSearch = !q || s.customer.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
-    const matchStatus = statusFilter === "all" || s.status === statusFilter;
-    return matchSearch && matchStatus;
+    return !q || s.customer.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) ||
+      s.items.some((i) => i.productName.toLowerCase().includes(q));
   });
 
-  const paidCount    = sales.filter((s) => s.status === "Paid").length;
-  const pendingCount = sales.filter((s) => s.status === "Pending").length;
-  const overdueCount = sales.filter((s) => s.status === "Overdue").length;
-  const totalRevenue = sales.reduce((a, s) => a + s.amount, 0);
-  const totalProfit  = sales.reduce((a, s) => a + s.profit, 0);
-  const margin       = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : "0";
+  const todayTotal   = sales.filter((s) => isToday(s.createdAt) && s.status === "Paid").reduce((sum, s) => sum + s.total, 0);
+  const monthTotal   = sales.filter((s) => s.status === "Paid").reduce((sum, s) => sum + s.total, 0);
+  const avgSale      = sales.length > 0 ? Math.round(sales.reduce((sum, s) => sum + s.total, 0) / sales.length) : 0;
+  const returnCount  = sales.filter((s) => s.status === "Returned").length;
 
-  function openEdit(s: Sale) {
-    setEditItem(s);
-    setEditForm({ customer: s.customer, amount: String(s.amount), status: s.status, paymentMethod: s.paymentMethod, dueDate: s.dueDate });
+  function pickProduct(idx: number, name: string) {
+    const prod = RETAIL_PRODUCTS.find((p) => p.name === name);
+    setFormItems((prev) =>
+      prev.map((item, i) =>
+        i === idx ? { ...item, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.mrp ?? 0 } : item
+      )
+    );
   }
-  function handleSaveEdit() {
-    if (!editItem || !editForm.customer || !editForm.amount) return;
-    setSales(sales.map((s) =>
-      s.id === editItem.id
-        ? { ...s, customer: editForm.customer, amount: Number(editForm.amount), status: editForm.status, paymentMethod: editForm.paymentMethod, dueDate: editForm.dueDate }
-        : s
-    ));
-    setEditItem(null);
-    toast.success("Invoice updated");
+  function setQty(idx: number, qty: string) {
+    setFormItems((prev) => prev.map((item, i) => (i === idx ? { ...item, qty } : item)));
   }
+  function removeFormItem(idx: number) {
+    setFormItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  const runningTotal = formItems.reduce((sum, item) => sum + (Number(item.qty) || 0) * item.unitPrice, 0);
+  const canSubmit = formItems.some((item) => item.productName && Number(item.qty) > 0);
+
+  function resetForm() {
+    setCustomer("");
+    setPayment("Cash");
+    setFormItems([emptyItem()]);
+  }
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    const saleItems: SaleItem[] = formItems
+      .filter((item) => item.productName && Number(item.qty) > 0)
+      .map((item) => ({
+        productName: item.productName,
+        sku: item.sku,
+        qty: Number(item.qty),
+        unitPrice: item.unitPrice,
+        lineTotal: Number(item.qty) * item.unitPrice,
+      }));
+    const newSale: Sale = {
+      id: nextSaleId(),
+      customer: customer.trim() || "Walk-in",
+      items: saleItems,
+      total: saleItems.reduce((sum, i) => sum + i.lineTotal, 0),
+      payment,
+      status: "Paid",
+      createdAt: new Date().toISOString(),
+    };
+    setSales((prev) => [newSale, ...prev]);
+    resetForm();
+    setOpen(false);
+    toast.success("Sale recorded", { description: `${newSale.id} · ${fmtINR(newSale.total)}` });
+  }
+
   function handleDelete() {
     if (!deleteId) return;
-    setSales(sales.filter((s) => s.id !== deleteId));
+    setSales((prev) => prev.filter((s) => s.id !== deleteId));
     setDeleteId(null);
-    toast.success("Invoice deleted");
+    toast.success("Sale deleted");
   }
-  function handleSubmit() {
-    if (!form.customer || !form.amount) return;
-    const profit = Math.round(Number(form.amount) * 0.3);
-    const now = new Date();
-    const newSale: Sale = {
-      id: "INV-" + (2042 + sales.length - initialSales.length),
-      customer: form.customer,
-      date: now.toISOString().slice(0, 10),
-      createdAt: now.toISOString(),
-      amount: Number(form.amount),
-      profit,
-      status: form.status,
-      paymentMethod: form.paymentMethod,
-      dueDate: form.dueDate,
-    };
-    setSales([newSale, ...sales]);
-    setForm({ customer: "", amount: "", status: "Paid", paymentMethod: "Cash", dueDate: new Date().toISOString().slice(0, 10) });
-    setOpen(false);
-    toast.success("Invoice created", { description: `${newSale.id} added for ${newSale.customer}` });
-  }
+
   function handleExport() {
-    const csv = [
-      ["Invoice", "Customer", "Date", "Amount", "Profit", "Method", "Due Date", "Status"].join(","),
-      ...sales.map((s) => [s.id, s.customer, s.date, s.amount, s.profit, s.paymentMethod, s.dueDate, s.status].join(",")),
+    const rows = [
+      ["Sale ID", "Customer", "Items", "Total", "Payment", "Status", "Date"].join(","),
+      ...sales.map((s) => [
+        s.id,
+        s.customer,
+        `"${s.items.map((i) => `${i.productName} x${i.qty}`).join("; ")}"`,
+        s.total,
+        s.payment,
+        s.status,
+        s.createdAt,
+      ].join(",")),
     ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob([rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "sales.csv";
+    a.download = "retail-sales.csv";
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Exported sales as CSV");
@@ -221,14 +315,14 @@ function SalesPage() {
   return (
     <PageShell
       title="Sales"
-      description="Invoices, revenue trends and top performing products."
+      description="Retail counter sales — products sold directly to walk-in customers."
       actions={
         <>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
             <Download className="h-4 w-4" /> Export
           </Button>
           <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
-            <Plus className="h-4 w-4" /> New Invoice
+            <Plus className="h-4 w-4" /> Record Sale
           </Button>
         </>
       }
@@ -237,33 +331,31 @@ function SalesPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
           label="Today's Sales"
-          value={fmtINR(salesOverview.today)}
-          sub="+12% vs yesterday"
-          subUp
-          icon={TrendingUp}
+          value={fmtINR(todayTotal)}
+          sub={`${sales.filter((s) => isToday(s.createdAt)).length} transactions today`}
+          icon={Receipt}
         />
         <KpiCard
           label="This Month"
-          value={fmtINR(salesOverview.month)}
-          sub={`${salesOverview.totalOrders} orders`}
-          icon={ShoppingCart}
+          value={fmtINR(monthTotal)}
+          sub={`${sales.filter((s) => s.status === "Paid").length} paid sales`}
+          icon={ShoppingBag}
         />
         <KpiCard
-          label="Pending Payments"
-          value={fmtINR(salesOverview.pendingPayments)}
-          sub={`${pendingCount + overdueCount} invoices`}
-          warn
-          icon={Wallet}
+          label="Avg. Sale Value"
+          value={fmtINR(avgSale)}
+          sub="per transaction"
+          icon={TrendingUp}
         />
         <KpiCard
-          label="Total Orders"
-          value={String(salesOverview.totalOrders)}
-          sub={`${sales.length} invoices shown`}
-          icon={Users}
+          label="Total Transactions"
+          value={String(sales.length)}
+          sub={`${returnCount} returned`}
+          icon={Receipt}
         />
       </div>
 
-      {/* Sales Trend + Quick Stats */}
+      {/* Sales Trend + Top Products */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardContent className="p-0">
@@ -306,168 +398,6 @@ function SalesPage() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="text-sm font-semibold mb-3">Invoice Status</h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-success" />
-                    <span className="text-sm text-muted-foreground">Paid</span>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums">{paidCount}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-warning" />
-                    <span className="text-sm text-muted-foreground">Pending</span>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums">{pendingCount}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-destructive" />
-                    <span className="text-sm text-muted-foreground">Overdue</span>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums text-destructive">{overdueCount}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="text-sm font-semibold mb-3">Sales vs Profit</h3>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Revenue</span>
-                  <span className="text-sm font-semibold tabular-nums">{fmtINR(totalRevenue)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Profit</span>
-                  <span className="text-sm font-semibold tabular-nums text-success">{fmtINR(totalProfit)}</span>
-                </div>
-                <div className="h-px bg-border" />
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Margin</span>
-                  <span className="text-sm font-bold tabular-nums text-primary">{margin}%</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Invoices Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="border-b border-border px-4 h-14 flex items-center gap-3">
-            <h2 className="font-display text-lg font-semibold mr-auto">Recent Invoices</h2>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input className="pl-7 h-8 w-40 text-sm" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-32 text-sm shrink-0"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="Paid">Paid</SelectItem>
-                <SelectItem value="Pending">Pending</SelectItem>
-                <SelectItem value="Overdue">Overdue</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground whitespace-nowrap">
-              <span className="font-medium text-foreground">{filtered.length}</span> / {sales.length}
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-16" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground text-sm">
-                      No invoices match your filters.
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>
-                      <span className="inline-flex items-center whitespace-nowrap rounded-md border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                        {s.id}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-medium whitespace-nowrap">{s.customer}</TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      <div>{s.date}</div>
-                      <div className="text-xs text-muted-foreground/60">{new Date(s.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">{s.paymentMethod}</TableCell>
-                    <TableCell className={`whitespace-nowrap text-sm ${s.status === "Overdue" ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                      {s.dueDate}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold whitespace-nowrap">
-                      {fmtINR(s.amount)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={STATUS_STYLES[s.status]}>
-                        {s.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(s)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(s.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bottom Row: Top Customers + Top Products */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardContent className="p-0">
-            <div className="border-b border-border px-4 py-3 flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <h2 className="font-display text-sm font-semibold">Top Customers</h2>
-            </div>
-            <div className="p-4 space-y-3">
-              {TOP_CUSTOMERS.map((c, i) => (
-                <div key={c.name} className="flex items-center gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.orders} orders</p>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums shrink-0">{fmtINR(c.totalSpend)}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardContent className="p-0">
             <div className="border-b border-border px-4 py-3 flex items-center justify-between">
@@ -480,7 +410,7 @@ function SalesPage() {
               </button>
             </div>
             <div className="p-4 space-y-3">
-              {topProducts.slice(0, 3).map((p, i) => {
+              {topProducts.slice(0, 5).map((p, i) => {
                 const pct = Math.round((p.profit / p.sales) * 100);
                 return (
                   <div key={p.name} className="flex items-center gap-3">
@@ -500,126 +430,226 @@ function SalesPage() {
         </Card>
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editItem} onOpenChange={(o) => !o && setEditItem(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Invoice</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Customer</Label>
-              <Select value={editForm.customer} onValueChange={(v) => setEditForm({ ...editForm, customer: v })}>
-                <SelectTrigger><SelectValue placeholder="Select customer…" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+      {/* Counter Sales Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="border-b border-border px-4 h-14 flex items-center gap-3">
+            <h2 className="font-display text-lg font-semibold mr-auto">Counter Sales</h2>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                className="pl-7 h-8 w-48 text-sm"
+                placeholder="Customer, product, ID…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Amount (₹)</Label>
-                <Input type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Due Date</Label>
-                <Input type="date" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v as Sale["status"] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Overdue">Overdue</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Payment Method</Label>
-                <Select value={editForm.paymentMethod} onValueChange={(v) => setEditForm({ ...editForm, paymentMethod: v as PaymentMethod })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground whitespace-nowrap">
+              <span className="font-medium text-foreground">{filtered.length}</span> / {sales.length}
+            </p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={!editForm.customer || !editForm.amount}>Save changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sale ID</TableHead>
+                  <TableHead>Date & Time</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground text-sm">
+                      No sales found.
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.map((s) => {
+                  const { date, time } = fmtDT(s.createdAt);
+                  const itemsSummary = s.items.map((i) => `${i.productName} ×${i.qty}`).join(", ");
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell>
+                        <span className="inline-flex items-center whitespace-nowrap rounded-md border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                          {s.id}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        <div className="text-sm">{date}</div>
+                        <div className="text-xs text-muted-foreground/60">{time}</div>
+                      </TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">{s.customer}</TableCell>
+                      <TableCell
+                        className="text-sm text-muted-foreground max-w-[260px] truncate"
+                        title={itemsSummary}
+                      >
+                        {itemsSummary}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold whitespace-nowrap">
+                        {fmtINR(s.total)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {s.payment}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={STATUS_STYLES[s.status]}>
+                          {s.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteId(s.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Delete AlertDialog */}
+      {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete invoice?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogTitle>Delete sale?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the sale record. This action cannot be undone.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* New Invoice Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+      {/* Record Sale Dialog */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!o) resetForm();
+          setOpen(o);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>New Invoice</DialogTitle>
+            <DialogTitle>Record Sale</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Customer */}
             <div className="space-y-1.5">
-              <Label>Customer</Label>
-              <Select value={form.customer} onValueChange={(v) => setForm({ ...form, customer: v })}>
-                <SelectTrigger><SelectValue placeholder="Select customer…" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>
+                Customer Name{" "}
+                <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+              </Label>
+              <Input
+                placeholder="Walk-in customer"
+                value={customer}
+                onChange={(e) => setCustomer(e.target.value)}
+              />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Amount (₹)</Label>
-                <Input type="number" placeholder="e.g. 25000" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Due Date</Label>
-                <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-              </div>
+
+            {/* Line Items */}
+            <div className="space-y-2">
+              <Label>
+                Products <span className="text-destructive">*</span>
+              </Label>
+              {formItems.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <Select value={item.productName} onValueChange={(v) => pickProduct(idx, v)}>
+                    <SelectTrigger className="flex-1 min-w-0">
+                      <SelectValue placeholder="Select product…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RETAIL_PRODUCTS.map((p) => (
+                        <SelectItem key={p.sku} value={p.name}>
+                          {p.name} — ₹{p.mrp}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Qty"
+                    className="w-16 shrink-0"
+                    value={item.qty}
+                    onChange={(e) => setQty(idx, e.target.value)}
+                  />
+                  <span className="text-sm tabular-nums text-muted-foreground w-20 text-right shrink-0">
+                    {item.unitPrice > 0 ? fmtINR((Number(item.qty) || 0) * item.unitPrice) : "—"}
+                  </span>
+                  {formItems.length > 1 && (
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeFormItem(idx)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button
+                variant="outline" size="sm"
+                className="gap-1.5 w-full"
+                onClick={() => setFormItems((prev) => [...prev, emptyItem()])}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Item
+              </Button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as Sale["status"] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Overdue">Overdue</SelectItem>
-                  </SelectContent>
-                </Select>
+
+            {/* Running Total */}
+            {runningTotal > 0 && (
+              <div className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3">
+                <span className="text-sm font-medium">Total</span>
+                <span className="text-lg font-bold tabular-nums">{fmtINR(runningTotal)}</span>
               </div>
-              <div className="space-y-1.5">
-                <Label>Payment Method</Label>
-                <Select value={form.paymentMethod} onValueChange={(v) => setForm({ ...form, paymentMethod: v as PaymentMethod })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+            )}
+
+            {/* Payment Method */}
+            <div className="space-y-1.5">
+              <Label>Payment Method</Label>
+              <div className="flex gap-2">
+                {(["Cash", "UPI", "Card"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPayment(m)}
+                    className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors ${
+                      payment === m
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={!form.customer || !form.amount}>Create Invoice</Button>
+            <Button onClick={handleSubmit} disabled={!canSubmit}>
+              Record Sale
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -627,7 +657,13 @@ function SalesPage() {
   );
 }
 
-function SalesTrendTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
+function SalesTrendTooltip({
+  active, payload, label,
+}: {
+  active?: boolean;
+  payload?: { name: string; value: number; color: string }[];
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl border border-border bg-popover shadow-lg px-4 py-3 text-sm min-w-[150px]">
@@ -644,7 +680,9 @@ function SalesTrendTooltip({ active, payload, label }: { active?: boolean; paylo
       {payload.length === 2 && (
         <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
           <span className="text-muted-foreground text-xs">Margin</span>
-          <span className="text-xs font-bold text-primary">{((payload[1].value / payload[0].value) * 100).toFixed(0)}%</span>
+          <span className="text-xs font-bold text-primary">
+            {((payload[1].value / payload[0].value) * 100).toFixed(0)}%
+          </span>
         </div>
       )}
     </div>
@@ -652,13 +690,11 @@ function SalesTrendTooltip({ active, payload, label }: { active?: boolean; paylo
 }
 
 function KpiCard({
-  label, value, sub, subUp, warn, icon: Icon,
+  label, value, sub, icon: Icon,
 }: {
   label: string;
   value: string;
   sub?: string;
-  subUp?: boolean;
-  warn?: boolean;
   icon?: React.ComponentType<{ className?: string }>;
 }) {
   return (
@@ -672,14 +708,8 @@ function KpiCard({
             </span>
           )}
         </div>
-        <p className={`text-2xl font-bold tabular-nums ${warn ? "text-warning" : ""}`}>
-          {value}
-        </p>
-        {sub && (
-          <p className={`mt-1.5 text-xs ${subUp ? "text-success font-medium" : "text-muted-foreground"}`}>
-            {subUp && "↑ "}{sub}
-          </p>
-        )}
+        <p className="text-2xl font-bold tabular-nums">{value}</p>
+        {sub && <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>
   );

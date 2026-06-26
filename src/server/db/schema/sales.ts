@@ -5,6 +5,7 @@ export const retailSales = pgTable("retail_sales", {
   id:            uuid("id").primaryKey().defaultRandom(),
   saleNumber:    text("sale_number").notNull().unique(),    // SAL-001
   customerName:  text("customer_name"),                     // null = walk-in
+  customerPhone: text("customer_phone"),
   paymentMethod: text("payment_method").notNull().default("Cash"), // Cash | UPI | Card
   totalAmount:   integer("total_amount").notNull(),
   status:        text("status").notNull().default("Paid"),  // Paid | Returned

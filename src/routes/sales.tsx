@@ -86,6 +86,7 @@ type SaleItem = {
 type Sale = {
   id: string;
   customer: string;
+  customerPhone: string;
   items: SaleItem[];
   total: number;
   payment: RetailPayment;
@@ -129,7 +130,7 @@ function isToday(iso: string) {
 
 const initialSales: Sale[] = [
   {
-    id: "SAL-010", customer: "Walk-in", payment: "Cash", status: "Paid",
+    id: "SAL-010", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-26T10:25:00", total: 520,
     items: [
       { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 2, unitPrice: 180, lineTotal: 360 },
@@ -137,14 +138,14 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-009", customer: "Ravi Kumar", payment: "UPI", status: "Paid",
+    id: "SAL-009", customer: "Ravi Kumar", customerPhone: "9876543210", payment: "UPI", status: "Paid",
     createdAt: "2026-06-26T09:48:00", total: 960,
     items: [
       { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 2, unitPrice: 480, lineTotal: 960 },
     ],
   },
   {
-    id: "SAL-008", customer: "Walk-in", payment: "Cash", status: "Paid",
+    id: "SAL-008", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-25T17:10:00", total: 490,
     items: [
       { productName: "Wheat Flour 10kg",     sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
@@ -152,7 +153,7 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-007", customer: "Priya S.", payment: "Card", status: "Paid",
+    id: "SAL-007", customer: "Priya S.", customerPhone: "9845001234", payment: "Card", status: "Paid",
     createdAt: "2026-06-25T15:30:00", total: 770,
     items: [
       { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
@@ -161,14 +162,14 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-006", customer: "Walk-in", payment: "Cash", status: "Paid",
+    id: "SAL-006", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-25T11:55:00", total: 540,
     items: [
       { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 3, unitPrice: 180, lineTotal: 540 },
     ],
   },
   {
-    id: "SAL-005", customer: "Meena Devi", payment: "UPI", status: "Paid",
+    id: "SAL-005", customer: "Meena Devi", customerPhone: "9900112233", payment: "UPI", status: "Paid",
     createdAt: "2026-06-24T16:20:00", total: 370,
     items: [
       { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 2, unitPrice: 130, lineTotal: 260 },
@@ -176,14 +177,14 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-004", customer: "Walk-in", payment: "Cash", status: "Paid",
+    id: "SAL-004", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Paid",
     createdAt: "2026-06-24T12:05:00", total: 760,
     items: [
       { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 2, unitPrice: 380, lineTotal: 760 },
     ],
   },
   {
-    id: "SAL-003", customer: "Suresh P.", payment: "UPI", status: "Paid",
+    id: "SAL-003", customer: "Suresh P.", customerPhone: "9812345678", payment: "UPI", status: "Paid",
     createdAt: "2026-06-23T14:40:00", total: 980,
     items: [
       { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
@@ -192,7 +193,7 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-002", customer: "Walk-in", payment: "Cash", status: "Returned",
+    id: "SAL-002", customer: "Walk-in", customerPhone: "", payment: "Cash", status: "Returned",
     createdAt: "2026-06-22T10:15:00", total: 350,
     items: [
       { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 1, unitPrice: 130, lineTotal: 130 },
@@ -200,7 +201,7 @@ const initialSales: Sale[] = [
     ],
   },
   {
-    id: "SAL-001", customer: "Lakshmi A.", payment: "Card", status: "Paid",
+    id: "SAL-001", customer: "Lakshmi A.", customerPhone: "9733221100", payment: "Card", status: "Paid",
     createdAt: "2026-06-22T09:30:00", total: 860,
     items: [
       { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
@@ -218,6 +219,7 @@ function SalesPage() {
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [customer, setCustomer] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [payment, setPayment] = useState<RetailPayment>("Cash");
   const [formItems, setFormItems] = useState<FormItem[]>([emptyItem()]);
 
@@ -252,6 +254,7 @@ function SalesPage() {
 
   function resetForm() {
     setCustomer("");
+    setCustomerPhone("");
     setPayment("Cash");
     setFormItems([emptyItem()]);
   }
@@ -270,6 +273,7 @@ function SalesPage() {
     const newSale: Sale = {
       id: nextSaleId(),
       customer: customer.trim() || "Walk-in",
+      customerPhone: customerPhone.trim(),
       items: saleItems,
       total: saleItems.reduce((sum, i) => sum + i.lineTotal, 0),
       payment,
@@ -483,7 +487,10 @@ function SalesPage() {
                         <div className="text-sm">{date}</div>
                         <div className="text-xs text-muted-foreground/60">{time}</div>
                       </TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">{s.customer}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="font-medium">{s.customer}</div>
+                        {s.customerPhone && <div className="text-xs text-muted-foreground">{s.customerPhone}</div>}
+                      </TableCell>
                       <TableCell
                         className="text-sm text-muted-foreground max-w-[260px] truncate"
                         title={itemsSummary}
@@ -554,16 +561,30 @@ function SalesPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Customer */}
-            <div className="space-y-1.5">
-              <Label>
-                Customer Name{" "}
-                <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-              </Label>
-              <Input
-                placeholder="Walk-in customer"
-                value={customer}
-                onChange={(e) => setCustomer(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>
+                  Customer Name{" "}
+                  <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                </Label>
+                <Input
+                  placeholder="Walk-in customer"
+                  value={customer}
+                  onChange={(e) => setCustomer(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Phone Number{" "}
+                  <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                </Label>
+                <Input
+                  type="tel"
+                  placeholder="9876543210"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                />
+              </div>
             </div>
 
             {/* Line Items */}

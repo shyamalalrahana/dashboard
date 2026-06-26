@@ -293,6 +293,15 @@ export const recentActivity = [
   { time: "09:40", type: "invoice",  label: "Invoice #2040 created for Metro General",  sub: "₹22,000 · Pending" },
 ];
 
+export const productCatalog = [
+  "Sunflower Oil 1L",
+  "Basmati Rice 5kg",
+  "Wheat Flour 10kg",
+  "Shampoo 200ml",
+  "Detergent Powder 1kg",
+  "Toor Dal 1kg",
+];
+
 export const batches = [
   { batch: "OIL-25-09-A", product: "Sunflower Oil 1L", mfg: "2025-09-05", expiry: "2027-09-04", qty: 220 },
   { batch: "RIC-25-09-B", product: "Basmati Rice 5kg", mfg: "2025-09-12", expiry: "2027-03-11", qty: 180 },

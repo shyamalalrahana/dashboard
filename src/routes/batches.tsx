@@ -41,7 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { batches as initialBatches, topProducts } from "@/lib/mock-data";
+import { batches as initialBatches, productCatalog } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/batches")({
   head: () => ({
@@ -59,7 +59,7 @@ function daysTo(date: string) {
   return Math.round((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-const PRODUCTS = topProducts.map((p) => p.name);
+const PRODUCTS = productCatalog;
 
 function BatchesPage() {
   const [batches, setBatches] = useState<Batch[]>(initialBatches);

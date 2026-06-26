@@ -63,15 +63,25 @@ type Product = {
   unit: string;
   expiryDate: string;
   status: "Active" | "Inactive" | "Discontinued";
+  createdAt: string; // ISO timestamp
 };
 
+let idCounter = 7;
+function nextId() { return `PRD-${String(idCounter++).padStart(3, "0")}`; }
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) +
+    " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+}
+
 const initialProducts: Product[] = [
-  { id: "PRD-001", name: "Sunflower Oil 1L", category: "Grocery", sku: "SOL-001", mrp: 180, costPrice: 140, qty: 240, unit: "btl", expiryDate: "2026-12-31", status: "Active" },
-  { id: "PRD-002", name: "Basmati Rice 5kg", category: "Grocery", sku: "BRS-005", mrp: 480, costPrice: 360, qty: 180, unit: "bag", expiryDate: "2027-03-31", status: "Active" },
-  { id: "PRD-003", name: "Wheat Flour 10kg", category: "Grocery", sku: "WFL-010", mrp: 380, costPrice: 290, qty: 320, unit: "bag", expiryDate: "2026-09-30", status: "Active" },
-  { id: "PRD-004", name: "Shampoo 200ml", category: "Personal Care", sku: "SHP-200", mrp: 130, costPrice: 75, qty: 90, unit: "btl", expiryDate: "2026-06-30", status: "Active" },
-  { id: "PRD-005", name: "Detergent Powder 1kg", category: "Household", sku: "DTP-001", mrp: 110, costPrice: 65, qty: 60, unit: "pkt", expiryDate: "2027-06-30", status: "Active" },
-  { id: "PRD-006", name: "Toor Dal 1kg", category: "Grocery", sku: "TDL-001", mrp: 160, costPrice: 120, qty: 0, unit: "pkt", expiryDate: "2025-12-31", status: "Discontinued" },
+  { id: "PRD-001", name: "Sunflower Oil 1L",     category: "Grocery",       sku: "SOL-001", mrp: 180, costPrice: 140, qty: 240, unit: "btl", expiryDate: "2026-12-31", status: "Active",       createdAt: "2026-06-01T09:15:00" },
+  { id: "PRD-002", name: "Basmati Rice 5kg",     category: "Grocery",       sku: "BRS-005", mrp: 480, costPrice: 360, qty: 180, unit: "bag", expiryDate: "2027-03-31", status: "Active",       createdAt: "2026-06-01T09:20:00" },
+  { id: "PRD-003", name: "Wheat Flour 10kg",     category: "Grocery",       sku: "WFL-010", mrp: 380, costPrice: 290, qty: 320, unit: "bag", expiryDate: "2026-09-30", status: "Active",       createdAt: "2026-06-02T10:00:00" },
+  { id: "PRD-004", name: "Shampoo 200ml",        category: "Personal Care", sku: "SHP-200", mrp: 130, costPrice: 75,  qty: 90,  unit: "btl", expiryDate: "2026-06-30", status: "Active",       createdAt: "2026-06-03T11:30:00" },
+  { id: "PRD-005", name: "Detergent Powder 1kg", category: "Household",     sku: "DTP-001", mrp: 110, costPrice: 65,  qty: 60,  unit: "pkt", expiryDate: "2027-06-30", status: "Active",       createdAt: "2026-06-05T14:00:00" },
+  { id: "PRD-006", name: "Toor Dal 1kg",         category: "Grocery",       sku: "TDL-001", mrp: 160, costPrice: 120, qty: 0,   unit: "pkt", expiryDate: "2025-12-31", status: "Discontinued", createdAt: "2026-05-10T08:45:00" },
 ];
 
 const CATEGORIES = ["Grocery", "Personal Care", "Household", "Beverages", "Snacks", "Dairy", "Electronics", "Other"];
@@ -135,7 +145,7 @@ export function ProductsPage() {
   function handleSubmit() {
     if (!form.name || !form.sku || !form.mrp || !form.expiryDate) return;
     const next: Product = {
-      id: `PRD-${String(products.length + 1).padStart(3, "0")}`,
+      id: nextId(),
       name: form.name,
       category: form.category,
       sku: form.sku,
@@ -145,6 +155,7 @@ export function ProductsPage() {
       unit: form.unit,
       expiryDate: form.expiryDate,
       status: form.status,
+      createdAt: new Date().toISOString(),
     };
     setProducts([next, ...products]);
     setForm({ name: "", category: "Grocery", sku: "", mrp: "", costPrice: "", qty: "", unit: "pkt", expiryDate: "", status: "Active" });
@@ -215,6 +226,7 @@ export function ProductsPage() {
                 <TableHead className="text-right">Cost (₹)</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
                 <TableHead>Expiry Date</TableHead>
+                <TableHead>Added On</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-16" />
               </TableRow>
@@ -252,6 +264,9 @@ export function ProductsPage() {
                         {exp === "expired" && <span className="ml-1.5 text-xs">(Expired)</span>}
                         {exp === "expiring" && <span className="ml-1.5 text-xs">(Soon)</span>}
                       </span>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {fmtDateTime(p.createdAt)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={
@@ -365,7 +380,7 @@ export function ProductsPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Product Name</Label>
+              <Label>Product Name <span className="text-destructive">*</span></Label>
               <Input placeholder="e.g. Sunflower Oil 1L" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -379,13 +394,13 @@ export function ProductsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>SKU</Label>
+                <Label>SKU <span className="text-destructive">*</span></Label>
                 <Input placeholder="e.g. BC-100" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>MRP (₹)</Label>
+                <Label>MRP (₹) <span className="text-destructive">*</span></Label>
                 <Input type="number" placeholder="180" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} />
               </div>
               <div className="space-y-1.5">
@@ -415,7 +430,7 @@ export function ProductsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Expiry Date</Label>
+              <Label>Expiry Date <span className="text-destructive">*</span></Label>
               <Input type="date" value={form.expiryDate} onChange={(e) => setForm({ ...form, expiryDate: e.target.value })} />
             </div>
           </div>

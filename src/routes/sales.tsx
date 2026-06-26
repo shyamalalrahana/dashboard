@@ -84,7 +84,8 @@ type PaymentMethod = "Cash" | "UPI" | "Bank Transfer" | "Cheque" | "Credit";
 type Sale = {
   id: string;
   customer: string;
-  date: string;
+  date: string;       // YYYY-MM-DD
+  createdAt: string;  // ISO timestamp for display
   amount: number;
   profit: number;
   status: "Paid" | "Pending" | "Overdue";
@@ -93,16 +94,16 @@ type Sale = {
 };
 
 const initialSales: Sale[] = [
-  { id: "INV-2041", customer: "City Mart",           date: "2026-06-26", amount: 18400, profit: 5520,  status: "Paid",    paymentMethod: "UPI",           dueDate: "2026-06-26" },
-  { id: "INV-2040", customer: "Metro General Store",  date: "2026-06-25", amount: 22000, profit: 7040,  status: "Pending", paymentMethod: "Credit",        dueDate: "2026-07-05" },
-  { id: "INV-2039", customer: "Fresh Daily Stores",   date: "2026-06-24", amount: 14000, profit: 4200,  status: "Pending", paymentMethod: "Bank Transfer",  dueDate: "2026-07-01" },
-  { id: "INV-2038", customer: "Raja Wholesale",       date: "2026-06-23", amount: 31500, profit: 9450,  status: "Paid",    paymentMethod: "Cheque",        dueDate: "2026-06-23" },
-  { id: "INV-2037", customer: "Star Supermarket",     date: "2026-06-22", amount: 9800,  profit: 2940,  status: "Paid",    paymentMethod: "Cash",          dueDate: "2026-06-22" },
-  { id: "INV-2036", customer: "Sunrise Stores",       date: "2026-06-20", amount: 27000, profit: 8100,  status: "Overdue", paymentMethod: "Credit",        dueDate: "2026-06-15" },
-  { id: "INV-2035", customer: "City Mart",            date: "2026-06-18", amount: 16500, profit: 4950,  status: "Paid",    paymentMethod: "UPI",           dueDate: "2026-06-18" },
-  { id: "INV-2034", customer: "Green Valley Foods",   date: "2026-06-17", amount: 42000, profit: 12600, status: "Overdue", paymentMethod: "Cheque",        dueDate: "2026-06-10" },
-  { id: "INV-2033", customer: "Metro General Store",  date: "2026-06-15", amount: 19800, profit: 5940,  status: "Paid",    paymentMethod: "Bank Transfer",  dueDate: "2026-06-15" },
-  { id: "INV-2032", customer: "Raja Wholesale",       date: "2026-06-12", amount: 35000, profit: 10500, status: "Paid",    paymentMethod: "Cheque",        dueDate: "2026-06-12" },
+  { id: "INV-2041", customer: "City Mart",           date: "2026-06-26", createdAt: "2026-06-26T10:12:00", amount: 18400, profit: 5520,  status: "Paid",    paymentMethod: "UPI",           dueDate: "2026-06-26" },
+  { id: "INV-2040", customer: "Metro General Store",  date: "2026-06-25", createdAt: "2026-06-25T14:33:00", amount: 22000, profit: 7040,  status: "Pending", paymentMethod: "Credit",        dueDate: "2026-07-05" },
+  { id: "INV-2039", customer: "Fresh Daily Stores",   date: "2026-06-24", createdAt: "2026-06-24T09:50:00", amount: 14000, profit: 4200,  status: "Pending", paymentMethod: "Bank Transfer", dueDate: "2026-07-01" },
+  { id: "INV-2038", customer: "Raja Wholesale",       date: "2026-06-23", createdAt: "2026-06-23T11:15:00", amount: 31500, profit: 9450,  status: "Paid",    paymentMethod: "Cheque",        dueDate: "2026-06-23" },
+  { id: "INV-2037", customer: "Star Supermarket",     date: "2026-06-22", createdAt: "2026-06-22T16:05:00", amount: 9800,  profit: 2940,  status: "Paid",    paymentMethod: "Cash",          dueDate: "2026-06-22" },
+  { id: "INV-2036", customer: "Sunrise Stores",       date: "2026-06-20", createdAt: "2026-06-20T08:40:00", amount: 27000, profit: 8100,  status: "Overdue", paymentMethod: "Credit",        dueDate: "2026-06-15" },
+  { id: "INV-2035", customer: "City Mart",            date: "2026-06-18", createdAt: "2026-06-18T13:22:00", amount: 16500, profit: 4950,  status: "Paid",    paymentMethod: "UPI",           dueDate: "2026-06-18" },
+  { id: "INV-2034", customer: "Green Valley Foods",   date: "2026-06-17", createdAt: "2026-06-17T10:58:00", amount: 42000, profit: 12600, status: "Overdue", paymentMethod: "Cheque",        dueDate: "2026-06-10" },
+  { id: "INV-2033", customer: "Metro General Store",  date: "2026-06-15", createdAt: "2026-06-15T15:45:00", amount: 19800, profit: 5940,  status: "Paid",    paymentMethod: "Bank Transfer", dueDate: "2026-06-15" },
+  { id: "INV-2032", customer: "Raja Wholesale",       date: "2026-06-12", createdAt: "2026-06-12T09:30:00", amount: 35000, profit: 10500, status: "Paid",    paymentMethod: "Cheque",        dueDate: "2026-06-12" },
 ];
 
 const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "UPI", "Bank Transfer", "Cheque", "Credit"];
@@ -185,10 +186,12 @@ function SalesPage() {
   function handleSubmit() {
     if (!form.customer || !form.amount) return;
     const profit = Math.round(Number(form.amount) * 0.3);
+    const now = new Date();
     const newSale: Sale = {
       id: "INV-" + (2042 + sales.length - initialSales.length),
       customer: form.customer,
-      date: new Date().toISOString().slice(0, 10),
+      date: now.toISOString().slice(0, 10),
+      createdAt: now.toISOString(),
       amount: Number(form.amount),
       profit,
       status: form.status,
@@ -406,7 +409,10 @@ function SalesPage() {
                       </span>
                     </TableCell>
                     <TableCell className="font-medium whitespace-nowrap">{s.customer}</TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">{s.date}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      <div>{s.date}</div>
+                      <div className="text-xs text-muted-foreground/60">{new Date(s.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">{s.paymentMethod}</TableCell>
                     <TableCell className={`whitespace-nowrap text-sm ${s.status === "Overdue" ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                       {s.dueDate}

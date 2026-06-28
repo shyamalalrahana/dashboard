@@ -27,6 +27,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { loadTaxSettings } from "@/lib/settings-store";
 import { loadProducts, saveProducts } from "@/lib/product-store";
+import { createProduct, deleteProduct, fetchProducts, updateProduct } from "@/lib/products.server";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/products")({
@@ -36,6 +37,7 @@ export const Route = createFileRoute("/products")({
       { name: "description", content: "Product catalogue with pricing and expiry tracking." },
     ],
   }),
+  loader: () => fetchProducts(),
   component: ProductsPage,
 });
 
@@ -251,7 +253,10 @@ const initialProducts: Product[] = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(() => loadProducts() as Product[] ?? initialProducts);
+  const dbProducts = Route.useLoaderData() as unknown as Product[];
+  const [products, setProducts] = useState<Product[]>(() =>
+    dbProducts?.length ? dbProducts : (loadProducts() as Product[] ?? initialProducts)
+  );
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -303,15 +308,13 @@ export function ProductsPage() {
       expiryDate: p.expiryDate, status: p.status,
     });
   }
-  function handleSaveEdit() {
+  async function handleSaveEdit() {
     if (!editItem || !editForm.name || !editForm.mrp) return;
-    setProducts(products.map((p) =>
-      p.id === editItem.id
-        ? { ...p, ...editForm, mrp: Number(editForm.mrp), costPrice: Number(editForm.costPrice) || 0, qty: Number(editForm.qty) || 0 }
-        : p
-    ));
+    const updated = { ...editItem, ...editForm, mrp: Number(editForm.mrp), costPrice: Number(editForm.costPrice) || 0, qty: Number(editForm.qty) || 0 };
+    setProducts(products.map((p) => p.id === editItem.id ? updated : p));
     setEditItem(null);
     toast.success("Product updated");
+    try { await updateProduct({ data: updated }); } catch { /* silent — local state already updated */ }
   }
 
   function openStockIn(productId = "") {
@@ -320,40 +323,49 @@ export function ProductsPage() {
     setStockInRef("");
     setStockInOpen(true);
   }
-  function handleStockIn() {
+  async function handleStockIn() {
     const product = products.find((p) => p.id === stockInProductId);
     if (!product || !stockInQty || Number(stockInQty) <= 0) return;
     const added = Number(stockInQty);
     const newQty = product.qty + added;
-    setProducts(products.map((p) => p.id === product.id ? { ...p, qty: newQty } : p));
+    const updated = { ...product, qty: newQty };
+    setProducts(products.map((p) => p.id === product.id ? updated : p));
     toast.success("Stock added", { description: `+${added} ${product.unit} · ${product.name} · New total: ${newQty}` });
     setStockInOpen(false);
+    try { await updateProduct({ data: updated }); } catch { /* silent */ }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deleteId) return;
     setProducts(products.filter((p) => p.id !== deleteId));
     setDeleteId(null);
     toast.success("Product deleted");
+    try { await deleteProduct({ data: { id: deleteId } }); } catch { /* silent */ }
   }
 
-  function handleAddProduct(product: Product) {
-    setProducts([product, ...products]);
+  async function handleAddProduct(product: Product) {
     setAddOpen(false);
     setNewlyAddedId(product.id);
     toast.success("Product added", { description: product.name });
-    // Scroll to the table after a tick
-    setTimeout(() => {
-      newRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-    // Remove highlight after 3 s
+    setTimeout(() => { newRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, 100);
     setTimeout(() => setNewlyAddedId(null), 3000);
+    try {
+      const saved = await createProduct({ data: product });
+      // Replace the temp product with the DB-assigned one (preserves id from DB)
+      setProducts((prev) => [saved as unknown as Product, ...prev.filter((p) => p.id !== product.id)]);
+    } catch {
+      setProducts((prev) => [product, ...prev]);
+    }
   }
 
-  function handleSetOffer(productId: string, offer: ProductOffer) {
+  async function handleSetOffer(productId: string, offer: ProductOffer) {
+    const product = products.find((p) => p.id === productId);
     setProducts(products.map((p) => p.id === productId ? { ...p, offer } : p));
     setOfferTargetId(null);
     toast.success(offer.enabled ? `Offer set: ${offer.value}${offer.type === "percent" ? "%" : "₹"} off` : "Offer removed");
+    if (product) {
+      try { await updateProduct({ data: { ...product, offer } }); } catch { /* silent */ }
+    }
   }
 
   return (

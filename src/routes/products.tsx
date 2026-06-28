@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { loadTaxSettings } from "@/lib/settings-store";
+import { saveProducts } from "@/lib/product-store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/products")({
@@ -276,6 +277,14 @@ export function ProductsPage() {
   });
 
   const newRowRef = useRef<HTMLTableRowElement>(null);
+
+  // Persist product list so Sales page can read it
+  useEffect(() => {
+    saveProducts(products.map((p) => ({
+      id: p.id, name: p.name, sku: p.sku, mrp: p.mrp,
+      sellingPrice: p.sellingPrice, unit: p.unit, qty: p.qty, status: p.status,
+    })));
+  }, [products]);
 
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase();

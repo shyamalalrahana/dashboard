@@ -63,6 +63,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtINR, salesTrend, topProducts } from "@/lib/mock-data";
+import { loadProducts } from "@/lib/product-store";
 import {
   computeGST,
   loadBusinessSettings,
@@ -104,14 +105,24 @@ type Sale = {
   createdAt: string;
 };
 
-const RETAIL_PRODUCTS = [
-  { name: "Sunflower Oil 1L",     sku: "SOL-001", mrp: 180 },
-  { name: "Basmati Rice 5kg",     sku: "BRS-005", mrp: 480 },
-  { name: "Wheat Flour 10kg",     sku: "WFL-010", mrp: 380 },
-  { name: "Shampoo 200ml",        sku: "SHP-200", mrp: 130 },
-  { name: "Detergent Powder 1kg", sku: "DTP-001", mrp: 110 },
-  { name: "Toor Dal 1kg",         sku: "TDL-001", mrp: 160 },
+const FALLBACK_PRODUCTS = [
+  { name: "Sunflower Oil 1L",     sku: "SOL-001", mrp: 180, sellingPrice: 170 },
+  { name: "Basmati Rice 5kg",     sku: "BRS-005", mrp: 480, sellingPrice: 460 },
+  { name: "Wheat Flour 10kg",     sku: "WFL-010", mrp: 380, sellingPrice: 360 },
+  { name: "Shampoo 200ml",        sku: "SHP-200", mrp: 130, sellingPrice: 125 },
+  { name: "Detergent Powder 1kg", sku: "DTP-001", mrp: 110, sellingPrice: 105 },
+  { name: "Toor Dal 1kg",         sku: "TDL-001", mrp: 160, sellingPrice: 155 },
 ];
+
+function getRetailProducts() {
+  const stored = loadProducts();
+  if (stored && stored.length > 0) {
+    return stored
+      .filter((p) => p.status === "Active")
+      .map((p) => ({ name: p.name, sku: p.sku, mrp: p.mrp, sellingPrice: p.sellingPrice }));
+  }
+  return FALLBACK_PRODUCTS;
+}
 
 const STATUS_STYLES: Record<SaleStatus, string> = {
   Paid:     "bg-success/15 text-success border-transparent",
@@ -228,6 +239,7 @@ function SalesPage() {
   const bizCfg      = loadBusinessSettings();
   const invoiceCfg  = loadInvoiceSettings();
 
+  const [retailProducts] = useState(() => getRetailProducts());
   const [sales, setSales] = useState<Sale[]>(initialSales);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -251,10 +263,10 @@ function SalesPage() {
   const returnCount  = sales.filter((s) => s.status === "Returned").length;
 
   function pickProduct(idx: number, name: string) {
-    const prod = RETAIL_PRODUCTS.find((p) => p.name === name);
+    const prod = retailProducts.find((p) => p.name === name);
     setFormItems((prev) =>
       prev.map((item, i) =>
-        i === idx ? { ...item, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.mrp ?? 0 } : item
+        i === idx ? { ...item, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.sellingPrice ?? prod?.mrp ?? 0 } : item
       )
     );
   }
@@ -633,9 +645,9 @@ function SalesPage() {
                       <SelectValue placeholder="Select product…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {RETAIL_PRODUCTS.map((p) => (
+                      {retailProducts.map((p) => (
                         <SelectItem key={p.sku} value={p.name}>
-                          {p.name} — ₹{p.mrp}
+                          {p.name} — ₹{p.sellingPrice ?? p.mrp}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -63,7 +63,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtINR, salesTrend, topProducts } from "@/lib/mock-data";
-import { loadProducts } from "@/lib/product-store";
+import { loadActiveProductsForSales } from "@/lib/product-store";
 import {
   computeGST,
   loadBusinessSettings,
@@ -115,11 +115,9 @@ const FALLBACK_PRODUCTS = [
 ];
 
 function getRetailProducts() {
-  const stored = loadProducts();
+  const stored = loadActiveProductsForSales();
   if (stored && stored.length > 0) {
-    return stored
-      .filter((p) => p.status === "Active")
-      .map((p) => ({ name: p.name, sku: p.sku, mrp: p.mrp, sellingPrice: p.sellingPrice }));
+    return stored.map((p) => ({ name: p.name, sku: p.sku, mrp: p.mrp, sellingPrice: p.sellingPrice }));
   }
   return FALLBACK_PRODUCTS;
 }

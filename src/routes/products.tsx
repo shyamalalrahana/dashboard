@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { loadTaxSettings } from "@/lib/settings-store";
-import { saveProducts } from "@/lib/product-store";
+import { loadProducts, saveProducts } from "@/lib/product-store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/products")({
@@ -251,7 +251,7 @@ const initialProducts: Product[] = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>(() => loadProducts() as Product[] ?? initialProducts);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -278,12 +278,9 @@ export function ProductsPage() {
 
   const newRowRef = useRef<HTMLTableRowElement>(null);
 
-  // Persist product list so Sales page can read it
+  // Persist full product list to localStorage for reload persistence and Sales page
   useEffect(() => {
-    saveProducts(products.map((p) => ({
-      id: p.id, name: p.name, sku: p.sku, mrp: p.mrp,
-      sellingPrice: p.sellingPrice, unit: p.unit, qty: p.qty, status: p.status,
-    })));
+    saveProducts(products);
   }, [products]);
 
   const filteredProducts = products.filter((p) => {

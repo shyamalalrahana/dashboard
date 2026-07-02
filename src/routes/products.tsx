@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { loadTaxSettings } from "@/lib/settings-store";
-import { loadProducts, saveProducts } from "@/lib/product-store";
 import { createProduct, deleteProduct, fetchProducts, updateProduct } from "@/lib/products.server";
 import { cn } from "@/lib/utils";
 
@@ -191,72 +190,11 @@ function effectivePrice(product: Product): number {
 
 const NO_OFFER: ProductOffer = { enabled: false, type: "percent", value: 0, label: "" };
 
-const initialProducts: Product[] = [
-  {
-    id: "PRD-001", name: "Sunflower Oil 1L", category: "Grocery", brand: "", productType: "Goods",
-    sku: "SOL-001", barcode: "", mrp: 180, sellingPrice: 170, costPrice: 140, minSellingPrice: 145,
-    unit: "btl", packSize: "1", packUnit: "L", packDisplayName: "1 L Bottle",
-    gstEnabled: true, taxMode: "Exclusive", gstRate: "5", hsn: "15121100",
-    qty: 240, minStock: 20, reorderLevel: 50, location: "",
-    expiryTracking: true, shelfLife: "18 Months", expiryDate: "2026-12-31",
-    description: "", notes: "", offer: NO_OFFER, status: "Active", createdAt: "2026-06-01T09:15:00",
-  },
-  {
-    id: "PRD-002", name: "Basmati Rice 5kg", category: "Grocery", brand: "", productType: "Goods",
-    sku: "BRS-005", barcode: "", mrp: 480, sellingPrice: 460, costPrice: 360, minSellingPrice: 380,
-    unit: "bag", packSize: "5", packUnit: "kg", packDisplayName: "5 kg Bag",
-    gstEnabled: true, taxMode: "Exclusive", gstRate: "5", hsn: "10063020",
-    qty: 180, minStock: 10, reorderLevel: 30, location: "",
-    expiryTracking: true, shelfLife: "12 Months", expiryDate: "2027-03-31",
-    description: "", notes: "", offer: { enabled: true, type: "percent", value: 10, label: "Weekend Sale" },
-    status: "Active", createdAt: "2026-06-01T09:20:00",
-  },
-  {
-    id: "PRD-003", name: "Wheat Flour 10kg", category: "Grocery", brand: "", productType: "Goods",
-    sku: "WFL-010", barcode: "", mrp: 380, sellingPrice: 360, costPrice: 290, minSellingPrice: 310,
-    unit: "bag", packSize: "10", packUnit: "kg", packDisplayName: "10 kg Bag",
-    gstEnabled: true, taxMode: "Exclusive", gstRate: "0", hsn: "11010000",
-    qty: 320, minStock: 20, reorderLevel: 50, location: "",
-    expiryTracking: true, shelfLife: "6 Months", expiryDate: "2026-09-30",
-    description: "", notes: "", offer: NO_OFFER, status: "Active", createdAt: "2026-06-02T10:00:00",
-  },
-  {
-    id: "PRD-004", name: "Shampoo 200ml", category: "Personal Care", brand: "", productType: "Goods",
-    sku: "SHP-200", barcode: "", mrp: 130, sellingPrice: 125, costPrice: 75, minSellingPrice: 80,
-    unit: "btl", packSize: "200", packUnit: "mL", packDisplayName: "200 mL Bottle",
-    gstEnabled: true, taxMode: "Exclusive", gstRate: "18", hsn: "33051000",
-    qty: 90, minStock: 10, reorderLevel: 25, location: "",
-    expiryTracking: true, shelfLife: "24 Months", expiryDate: "2026-06-30",
-    description: "", notes: "", offer: NO_OFFER, status: "Active", createdAt: "2026-06-03T11:30:00",
-  },
-  {
-    id: "PRD-005", name: "Detergent Powder 1kg", category: "Household", brand: "", productType: "Goods",
-    sku: "DTP-001", barcode: "", mrp: 110, sellingPrice: 105, costPrice: 65, minSellingPrice: 70,
-    unit: "pkt", packSize: "1", packUnit: "kg", packDisplayName: "1 kg Packet",
-    gstEnabled: true, taxMode: "Exclusive", gstRate: "18", hsn: "34022090",
-    qty: 60, minStock: 10, reorderLevel: 20, location: "",
-    expiryTracking: false, shelfLife: "", expiryDate: "2027-06-30",
-    description: "", notes: "", offer: { enabled: true, type: "percent", value: 50, label: "Clearance" },
-    status: "Active", createdAt: "2026-06-05T14:00:00",
-  },
-  {
-    id: "PRD-006", name: "Toor Dal 1kg", category: "Grocery", brand: "", productType: "Goods",
-    sku: "TDL-001", barcode: "", mrp: 160, sellingPrice: 155, costPrice: 120, minSellingPrice: 125,
-    unit: "pkt", packSize: "1", packUnit: "kg", packDisplayName: "1 kg Packet",
-    gstEnabled: true, taxMode: "Exclusive", gstRate: "5", hsn: "07135000",
-    qty: 0, minStock: 5, reorderLevel: 15, location: "",
-    expiryTracking: true, shelfLife: "12 Months", expiryDate: "2025-12-31",
-    description: "", notes: "", offer: NO_OFFER, status: "Discontinued", createdAt: "2026-05-10T08:45:00",
-  },
-];
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function ProductsPage() {
   const dbProducts = Route.useLoaderData() as unknown as Product[];
-  const [products, setProducts] = useState<Product[]>(() =>
-    dbProducts?.length ? dbProducts : (loadProducts() as Product[] ?? initialProducts)
-  );
+  const [products, setProducts] = useState<Product[]>(dbProducts ?? []);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -282,11 +220,6 @@ export function ProductsPage() {
   });
 
   const newRowRef = useRef<HTMLTableRowElement>(null);
-
-  // Persist full product list to localStorage for reload persistence and Sales page
-  useEffect(() => {
-    saveProducts(products);
-  }, [products]);
 
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase();
@@ -345,16 +278,15 @@ export function ProductsPage() {
 
   async function handleAddProduct(product: Product) {
     setAddOpen(false);
-    setNewlyAddedId(product.id);
-    toast.success("Product added", { description: product.name });
-    setTimeout(() => { newRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, 100);
-    setTimeout(() => setNewlyAddedId(null), 3000);
     try {
-      const saved = await createProduct({ data: product });
-      // Replace the temp product with the DB-assigned one (preserves id from DB)
-      setProducts((prev) => [saved as unknown as Product, ...prev.filter((p) => p.id !== product.id)]);
-    } catch {
-      setProducts((prev) => [product, ...prev]);
+      const saved = (await createProduct({ data: product })) as unknown as Product;
+      setProducts((prev) => [saved, ...prev]);
+      setNewlyAddedId(saved.id);
+      toast.success("Product added", { description: saved.name });
+      setTimeout(() => { newRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, 100);
+      setTimeout(() => setNewlyAddedId(null), 3000);
+    } catch (err) {
+      toast.error("Could not save product", { description: err instanceof Error ? err.message : "Please try again." });
     }
   }
 
@@ -1185,7 +1117,7 @@ function AddProductDialog({ open, onClose, onAdd, categories, productTypes, bran
   const offersRef = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLDivElement>(null);
 
-  const sectionRefs: Record<SectionKey, React.RefObject<HTMLDivElement>> = {
+  const sectionRefs: Record<SectionKey, React.RefObject<HTMLDivElement | null>> = {
     basic: basicRef, unit: unitRef, pricing: pricingRef, tax: taxRef,
     inventory: inventoryRef, expiry: expiryRef, offers: offersRef, notes: notesRef,
   };

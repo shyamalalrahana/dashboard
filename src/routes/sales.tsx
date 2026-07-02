@@ -63,7 +63,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fmtINR, salesTrend, topProducts } from "@/lib/mock-data";
-import { loadActiveProductsForSales } from "@/lib/product-store";
+import { createSale, deleteSale, fetchSaleProducts, fetchSales } from "@/lib/sales.server";
 import {
   computeGST,
   loadBusinessSettings,
@@ -79,6 +79,10 @@ export const Route = createFileRoute("/sales")({
       { name: "description", content: "Retail counter sales — products sold directly to walk-in customers." },
     ],
   }),
+  loader: async () => {
+    const [dbSales, dbProducts] = await Promise.all([fetchSales(), fetchSaleProducts()]);
+    return { dbSales, dbProducts };
+  },
   component: SalesPage,
 });
 
@@ -86,6 +90,7 @@ type RetailPayment = "Cash" | "UPI" | "Card";
 type SaleStatus = "Paid" | "Returned";
 
 type SaleItem = {
+  productId?: string;
   productName: string;
   sku: string;
   qty: number;
@@ -94,7 +99,8 @@ type SaleItem = {
 };
 
 type Sale = {
-  id: string;
+  id: string;      // sale number, e.g. SAL-011
+  dbId?: string;   // database uuid (absent only for legacy/demo rows)
   customer: string;
   customerPhone: string;
   customerEmail: string;
@@ -105,30 +111,11 @@ type Sale = {
   createdAt: string;
 };
 
-const FALLBACK_PRODUCTS = [
-  { name: "Sunflower Oil 1L",     sku: "SOL-001", mrp: 180, sellingPrice: 170 },
-  { name: "Basmati Rice 5kg",     sku: "BRS-005", mrp: 480, sellingPrice: 460 },
-  { name: "Wheat Flour 10kg",     sku: "WFL-010", mrp: 380, sellingPrice: 360 },
-  { name: "Shampoo 200ml",        sku: "SHP-200", mrp: 130, sellingPrice: 125 },
-  { name: "Detergent Powder 1kg", sku: "DTP-001", mrp: 110, sellingPrice: 105 },
-  { name: "Toor Dal 1kg",         sku: "TDL-001", mrp: 160, sellingPrice: 155 },
-];
-
-function getRetailProducts() {
-  const stored = loadActiveProductsForSales();
-  if (stored && stored.length > 0) {
-    return stored.map((p) => ({ name: p.name, sku: p.sku, mrp: p.mrp, sellingPrice: p.sellingPrice }));
-  }
-  return FALLBACK_PRODUCTS;
-}
 
 const STATUS_STYLES: Record<SaleStatus, string> = {
   Paid:     "bg-success/15 text-success border-transparent",
   Returned: "bg-destructive/10 text-destructive border-destructive/30",
 };
-
-let saleCounter = 11;
-function nextSaleId() { return `SAL-${String(saleCounter++).padStart(3, "0")}`; }
 
 function fmtDT(iso: string) {
   const d = new Date(iso);
@@ -147,89 +134,7 @@ function isToday(iso: string) {
   return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 }
 
-const initialSales: Sale[] = [
-  {
-    id: "SAL-010", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
-    createdAt: "2026-06-26T10:25:00", total: 520,
-    items: [
-      { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 2, unitPrice: 180, lineTotal: 360 },
-      { productName: "Toor Dal 1kg",     sku: "TDL-001", qty: 1, unitPrice: 160, lineTotal: 160 },
-    ],
-  },
-  {
-    id: "SAL-009", customer: "Ravi Kumar", customerPhone: "9876543210", customerEmail: "ravi.kumar@email.com", payment: "UPI", status: "Paid",
-    createdAt: "2026-06-26T09:48:00", total: 960,
-    items: [
-      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 2, unitPrice: 480, lineTotal: 960 },
-    ],
-  },
-  {
-    id: "SAL-008", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
-    createdAt: "2026-06-25T17:10:00", total: 490,
-    items: [
-      { productName: "Wheat Flour 10kg",     sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
-      { productName: "Detergent Powder 1kg", sku: "DTP-001", qty: 1, unitPrice: 110, lineTotal: 110 },
-    ],
-  },
-  {
-    id: "SAL-007", customer: "Priya S.", customerPhone: "9845001234", customerEmail: "priya.s@gmail.com", payment: "Card", status: "Paid",
-    createdAt: "2026-06-25T15:30:00", total: 770,
-    items: [
-      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
-      { productName: "Shampoo 200ml",    sku: "SHP-200", qty: 1, unitPrice: 130, lineTotal: 130 },
-      { productName: "Toor Dal 1kg",     sku: "TDL-001", qty: 1, unitPrice: 160, lineTotal: 160 },
-    ],
-  },
-  {
-    id: "SAL-006", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
-    createdAt: "2026-06-25T11:55:00", total: 540,
-    items: [
-      { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 3, unitPrice: 180, lineTotal: 540 },
-    ],
-  },
-  {
-    id: "SAL-005", customer: "Meena Devi", customerPhone: "9900112233", customerEmail: "meena.devi@yahoo.com", payment: "UPI", status: "Paid",
-    createdAt: "2026-06-24T16:20:00", total: 370,
-    items: [
-      { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 2, unitPrice: 130, lineTotal: 260 },
-      { productName: "Detergent Powder 1kg", sku: "DTP-001", qty: 1, unitPrice: 110, lineTotal: 110 },
-    ],
-  },
-  {
-    id: "SAL-004", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Paid",
-    createdAt: "2026-06-24T12:05:00", total: 760,
-    items: [
-      { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 2, unitPrice: 380, lineTotal: 760 },
-    ],
-  },
-  {
-    id: "SAL-003", customer: "Suresh P.", customerPhone: "9812345678", customerEmail: "suresh.p@gmail.com", payment: "UPI", status: "Paid",
-    createdAt: "2026-06-23T14:40:00", total: 980,
-    items: [
-      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
-      { productName: "Sunflower Oil 1L", sku: "SOL-001", qty: 1, unitPrice: 180, lineTotal: 180 },
-      { productName: "Toor Dal 1kg",     sku: "TDL-001", qty: 2, unitPrice: 160, lineTotal: 320 },
-    ],
-  },
-  {
-    id: "SAL-002", customer: "Walk-in", customerPhone: "", customerEmail: "", payment: "Cash", status: "Returned",
-    createdAt: "2026-06-22T10:15:00", total: 350,
-    items: [
-      { productName: "Shampoo 200ml",        sku: "SHP-200", qty: 1, unitPrice: 130, lineTotal: 130 },
-      { productName: "Detergent Powder 1kg", sku: "DTP-001", qty: 2, unitPrice: 110, lineTotal: 220 },
-    ],
-  },
-  {
-    id: "SAL-001", customer: "Lakshmi A.", customerPhone: "9733221100", customerEmail: "lakshmi.a@email.com", payment: "Card", status: "Paid",
-    createdAt: "2026-06-22T09:30:00", total: 860,
-    items: [
-      { productName: "Wheat Flour 10kg", sku: "WFL-010", qty: 1, unitPrice: 380, lineTotal: 380 },
-      { productName: "Basmati Rice 5kg", sku: "BRS-005", qty: 1, unitPrice: 480, lineTotal: 480 },
-    ],
-  },
-];
-
-type FormItem = { productName: string; sku: string; qty: string; unitPrice: number };
+type FormItem = { productId?: string; productName: string; sku: string; qty: string; unitPrice: number };
 const emptyItem = (): FormItem => ({ productName: "", sku: "", qty: "1", unitPrice: 0 });
 
 function SalesPage() {
@@ -237,8 +142,9 @@ function SalesPage() {
   const bizCfg      = loadBusinessSettings();
   const invoiceCfg  = loadInvoiceSettings();
 
-  const [retailProducts] = useState(() => getRetailProducts());
-  const [sales, setSales] = useState<Sale[]>(initialSales);
+  const { dbSales, dbProducts } = Route.useLoaderData();
+  const retailProducts = dbProducts;
+  const [sales, setSales] = useState<Sale[]>(dbSales as Sale[]);
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -248,6 +154,7 @@ function SalesPage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [payment, setPayment] = useState<RetailPayment>("Cash");
   const [formItems, setFormItems] = useState<FormItem[]>([emptyItem()]);
+  const [saving, setSaving] = useState(false);
 
   const filtered = sales.filter((s) => {
     const q = search.toLowerCase();
@@ -264,7 +171,9 @@ function SalesPage() {
     const prod = retailProducts.find((p) => p.name === name);
     setFormItems((prev) =>
       prev.map((item, i) =>
-        i === idx ? { ...item, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.sellingPrice ?? prod?.mrp ?? 0 } : item
+        i === idx
+          ? { ...item, productId: prod?.id, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.sellingPrice || prod?.mrp || 0 }
+          : item
       )
     );
   }
@@ -288,11 +197,12 @@ function SalesPage() {
     setFormItems([emptyItem()]);
   }
 
-  function handleSubmit() {
-    if (!canSubmit) return;
+  async function handleSubmit() {
+    if (!canSubmit || saving) return;
     const saleItems: SaleItem[] = formItems
       .filter((item) => item.productName && Number(item.qty) > 0)
       .map((item) => ({
+        productId: item.productId,
         productName: item.productName,
         sku: item.sku,
         qty: Number(item.qty),
@@ -301,29 +211,42 @@ function SalesPage() {
       }));
     const itemsSubtotal = saleItems.reduce((sum, i) => sum + i.lineTotal, 0);
     const saleGst = computeGST(itemsSubtotal, taxCfg);
-    const newSale: Sale = {
-      id: nextSaleId(),
-      customer: customer.trim() || "Walk-in",
-      customerPhone: customerPhone.trim(),
-      customerEmail: customerEmail.trim(),
-      items: saleItems,
-      total: saleGst.total,
-      payment,
-      status: "Paid",
-      createdAt: new Date().toISOString(),
-    };
-    setSales((prev) => [newSale, ...prev]);
-    resetForm();
-    setOpen(false);
-    setPrintSale(newSale);
-    toast.success("Sale recorded", { description: `${newSale.id} · ${fmtINR(newSale.total)}` });
+    setSaving(true);
+    try {
+      const saved = await createSale({
+        data: {
+          customer: customer.trim(),
+          customerPhone: customerPhone.trim(),
+          customerEmail: customerEmail.trim(),
+          payment,
+          subtotal: saleGst.taxable,
+          gstAmount: saleGst.gstAmount,
+          total: saleGst.total,
+          items: saleItems,
+        },
+      });
+      const newSale = saved as Sale;
+      setSales((prev) => [newSale, ...prev]);
+      resetForm();
+      setOpen(false);
+      setPrintSale(newSale);
+      toast.success("Sale recorded", { description: `${newSale.id} · ${fmtINR(newSale.total)}` });
+    } catch (err) {
+      toast.error("Could not save sale", { description: err instanceof Error ? err.message : "Please try again." });
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deleteId) return;
+    const sale = sales.find((s) => s.id === deleteId);
     setSales((prev) => prev.filter((s) => s.id !== deleteId));
     setDeleteId(null);
     toast.success("Sale deleted");
+    if (sale?.dbId) {
+      try { await deleteSale({ data: { dbId: sale.dbId, restock: true } }); } catch { /* local state already updated */ }
+    }
   }
 
   function handleExport() {

@@ -147,7 +147,8 @@ export const deleteSale = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// Lightweight product list for the sale form dropdown
+// Product list for the sale form dropdown — includes offer fields so the
+// counter always sells at the product's current effective (discounted) price.
 export const fetchSaleProducts = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await db
     .select({
@@ -157,9 +158,26 @@ export const fetchSaleProducts = createServerFn({ method: "GET" }).handler(async
       mrp: products.mrp,
       sellingPrice: products.sellingPrice,
       stock: products.stock,
+      offerEnabled: products.offerEnabled,
+      offerType: products.offerType,
+      offerValue: products.offerValue,
+      offerLabel: products.offerLabel,
     })
     .from(products)
     .where(eq(products.status, "Active"))
     .orderBy(products.name);
-  return rows;
+
+  return rows.map((r) => {
+    const base = r.sellingPrice || r.mrp;
+    const offerValue = Number(r.offerValue ?? 0);
+    const effectivePrice = r.offerEnabled && offerValue > 0
+      ? (r.offerType === "percent" ? Math.round(base * (1 - offerValue / 100)) : Math.max(0, base - offerValue))
+      : base;
+    return {
+      id: r.id, name: r.name, sku: r.sku, mrp: r.mrp, sellingPrice: r.sellingPrice, stock: r.stock,
+      effectivePrice,
+      offerEnabled: r.offerEnabled && offerValue > 0,
+      offerLabel: r.offerLabel ?? "",
+    };
+  });
 });

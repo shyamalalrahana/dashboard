@@ -32,7 +32,7 @@ export type MasterOptions = Record<string, MasterOption[]>;
 export type OptionHandlers = {
   onAddOption: (kind: string, value: string) => Promise<MasterOption | null>;
   onRenameOption: (kind: string, id: string, value: string) => Promise<void>;
-  onDeleteOption: (kind: string, id: string) => Promise<void>;
+  onDeleteOption: (kind: string, id: string) => Promise<{ ok: boolean }>;
 };
 
 // ── Editable master-data dropdown: select + add + rename + delete ──────────────
@@ -75,8 +75,8 @@ function MasterSelect({
 
   async function handleDelete(id: string) {
     const old = options.find((o) => o.id === id);
-    await handlers.onDeleteOption(kind, id);
-    if (old && value === old.value) onValueChange("");
+    const result = await handlers.onDeleteOption(kind, id);
+    if (result.ok && old && value === old.value) onValueChange("");
   }
 
   return (
@@ -252,6 +252,39 @@ function buildDefaultForm(): FormState {
   };
 }
 
+function buildFormFromProduct(p: Product): FormState {
+  return {
+    name: p.name, skuMode: "manual", sku: p.sku, barcode: p.barcode, description: p.description, status: p.status,
+    category: p.category, brand: p.brand, productType: p.productType,
+    unit: p.unit, packSize: p.packSize, packUnit: p.packUnit, packDisplayName: p.packDisplayName,
+    costPrice: p.costPrice ? String(p.costPrice) : "",
+    sellingPrice: p.sellingPrice ? String(p.sellingPrice) : "",
+    mrp: p.mrp ? String(p.mrp) : "",
+    minSellingPrice: p.minSellingPrice ? String(p.minSellingPrice) : "",
+    wholesalePrice: p.wholesalePrice ? String(p.wholesalePrice) : "",
+    distributorPrice: p.distributorPrice ? String(p.distributorPrice) : "",
+    gstEnabled: p.gstEnabled, taxMode: p.taxMode, taxProfile: p.taxProfile, hsn: p.hsn,
+    openingStock: p.qty ? String(p.qty) : "",
+    minStock: p.minStock ? String(p.minStock) : "",
+    maxStock: p.maxStock ? String(p.maxStock) : "",
+    reorderLevel: p.reorderLevel ? String(p.reorderLevel) : "",
+    warehouse: p.warehouse, location: p.location, rack: p.rack, bin: p.bin,
+    attributes: p.attributes.length ? p.attributes : [],
+    hasVariants: p.hasVariants,
+    variantGroups: p.variants.groups.length ? p.variants.groups : [],
+    variantItems: p.variants.items.length ? p.variants.items : [],
+    supplierName: p.supplierName, supplierCode: p.supplierCode, leadTime: p.leadTime, minOrder: p.minOrder,
+    primaryImage: p.images.primary, gallery: p.images.gallery.length ? p.images.gallery : [],
+    modules: { ...EMPTY_MODULES, ...p.modules },
+    mfgDate: p.mfgDate, warranty: p.warranty,
+    expiryTracking: p.expiryTracking, shelfLife: p.shelfLife, expiryDate: p.expiryDate,
+    offerEnabled: p.offer.enabled, offerType: p.offer.type,
+    offerValue: p.offer.value > 0 ? String(p.offer.value) : "",
+    offerLabel: p.offer.label,
+    notes: p.notes,
+  };
+}
+
 function cartesian(groups: VariantGroup[]): string[] {
   const lists = groups.filter((g) => g.values.length > 0).map((g) => g.values);
   if (lists.length === 0) return [];
@@ -262,22 +295,28 @@ function cartesian(groups: VariantGroup[]): string[] {
 // ── Dialog ─────────────────────────────────────────────────────────────────────
 
 export function AddProductDialog({
-  open, onClose, onAdd, options, handlers,
+  open, onClose, onSave, editProduct, options, handlers,
 }: {
   open: boolean;
   onClose: () => void;
-  onAdd: (product: Product) => void;
+  onSave: (product: Product) => void;
+  editProduct?: Product | null;
   options: MasterOptions;
   handlers: OptionHandlers;
 }) {
-  const [form, setForm] = useState<FormState>(buildDefaultForm);
+  const isEdit = !!editProduct;
+  const [form, setForm] = useState<FormState>(() => editProduct ? buildFormFromProduct(editProduct) : buildDefaultForm());
   const [activeSection, setActiveSection] = useState<SectionKey>("basic");
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Partial<Record<SectionKey, HTMLDivElement | null>>>({});
 
   useEffect(() => {
-    if (open) { setForm(buildDefaultForm()); setActiveSection("basic"); }
-  }, [open]);
+    if (open) {
+      setForm(editProduct ? buildFormFromProduct(editProduct) : buildDefaultForm());
+      setActiveSection("basic");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editProduct?.id]);
 
   useEffect(() => {
     if (form.skuMode === "auto" && form.name) {
@@ -286,8 +325,14 @@ export function AddProductDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.name, form.category, form.skuMode]);
 
-  // Auto pack display name
+  // Auto pack display name — skip the render right after (re)opening so an
+  // existing product's saved display name isn't silently overwritten.
+  const skipPackAutoRef = useRef(true);
   useEffect(() => {
+    skipPackAutoRef.current = true;
+  }, [open, editProduct?.id]);
+  useEffect(() => {
+    if (skipPackAutoRef.current) { skipPackAutoRef.current = false; return; }
     if (form.packSize && form.packUnit) {
       setForm((f) => ({ ...f, packDisplayName: `${f.packSize} ${f.packUnit} ${f.unit}`.trim() }));
     }
@@ -327,7 +372,7 @@ export function AddProductDialog({
   function handleSave() {
     if (!canSave) return;
     const product: Product = {
-      id: "", // assigned by DB
+      id: editProduct?.id ?? "", // "" for a new product — the DB assigns one on insert
       name: form.name.trim(),
       sku: form.sku || generateSku(form.name, form.category),
       barcode: form.barcode,
@@ -381,9 +426,9 @@ export function AddProductDialog({
         ? { enabled: true, type: form.offerType, value: Number(form.offerValue), label: form.offerLabel }
         : { ...NO_OFFER },
       notes: form.notes,
-      createdAt: new Date().toISOString(),
+      createdAt: editProduct?.createdAt ?? new Date().toISOString(),
     };
-    onAdd(product);
+    onSave(product);
   }
 
   // Offer preview
@@ -402,7 +447,7 @@ export function AddProductDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-4xl p-0 gap-0 max-h-[90vh] flex flex-col">
         <DialogHeader className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <DialogTitle>Add Product</DialogTitle>
+          <DialogTitle>{isEdit ? `Edit Product — ${editProduct?.name}` : "Add Product"}</DialogTitle>
           <p className="text-sm text-muted-foreground font-normal">
             Dynamic product master — dropdowns are managed master data; enable only the modules you need.
           </p>
@@ -873,7 +918,7 @@ export function AddProductDialog({
           <p className="text-xs text-muted-foreground">{missingReason || "Ready to save."}</p>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!canSave}>Save Product</Button>
+            <Button onClick={handleSave} disabled={!canSave}>{isEdit ? "Save Changes" : "Save Product"}</Button>
           </div>
         </DialogFooter>
       </DialogContent>

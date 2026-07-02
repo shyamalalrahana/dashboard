@@ -172,7 +172,7 @@ function SalesPage() {
     setFormItems((prev) =>
       prev.map((item, i) =>
         i === idx
-          ? { ...item, productId: prod?.id, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.sellingPrice || prod?.mrp || 0 }
+          ? { ...item, productId: prod?.id, productName: name, sku: prod?.sku ?? "", unitPrice: prod?.effectivePrice ?? prod?.sellingPrice ?? prod?.mrp ?? 0 }
           : item
       )
     );
@@ -568,7 +568,15 @@ function SalesPage() {
                     <SelectContent>
                       {retailProducts.map((p) => (
                         <SelectItem key={p.sku} value={p.name}>
-                          {p.name} — ₹{p.sellingPrice ?? p.mrp}
+                          {p.name} — {p.offerEnabled ? (
+                            <>
+                              <span className="line-through text-muted-foreground">₹{p.sellingPrice ?? p.mrp}</span>{" "}
+                              <span className="text-success font-medium">₹{p.effectivePrice}</span>
+                              {p.offerLabel && ` (${p.offerLabel})`}
+                            </>
+                          ) : (
+                            <>₹{p.effectivePrice}</>
+                          )}
                         </SelectItem>
                       ))}
                     </SelectContent>

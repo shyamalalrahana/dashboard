@@ -73,14 +73,16 @@ function ProductsPage() {
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
   const [offerTargetId, setOfferTargetId] = useState<string | null>(null);
 
-  const [editForm, setEditForm] = useState({
-    name: "", category: "", sku: "", mrp: "", costPrice: "", qty: "", unit: "Piece",
-    expiryDate: "", status: "Active" as Product["status"],
-  });
-
   const newRowRef = useRef<HTMLTableRowElement>(null);
 
   const categories = (options.category ?? []).map((o) => o.value);
+
+  // Re-sync master data whenever the Add/Edit dialog opens, so a category (etc.)
+  // created in another tab/session — or missed by an optimistic update — is always current.
+  useEffect(() => {
+    if (!addOpen && !editItem) return;
+    fetchAllOptions().then(setOptions).catch(() => { /* keep existing options on failure */ });
+  }, [addOpen, editItem]);
 
   // ── Master-data handlers (shared by every editable dropdown) ────────────────
   const optionHandlers = {
@@ -104,9 +106,23 @@ function ProductsPage() {
       }));
       try { await renameOption({ data: { id, value } }); } catch { toast.error("Rename failed to save"); }
     },
-    onDeleteOption: async (kind: string, id: string) => {
-      setOptions((prev) => ({ ...prev, [kind]: (prev[kind] ?? []).filter((o) => o.id !== id) }));
-      try { await deleteOption({ data: { id } }); } catch { toast.error("Delete failed to save"); }
+    onDeleteOption: async (kind: string, id: string): Promise<{ ok: boolean }> => {
+      try {
+        const result = await deleteOption({ data: { id } });
+        if (!result.ok) {
+          const label = "value" in result ? result.value : "This value";
+          const n = "inUseCount" in result ? result.inUseCount : 0;
+          toast.error(`Can't delete "${label}"`, {
+            description: `It's used by ${n} product${n === 1 ? "" : "s"}. Remove it from ${n === 1 ? "that product" : "those products"} first.`,
+          });
+          return { ok: false };
+        }
+        setOptions((prev) => ({ ...prev, [kind]: (prev[kind] ?? []).filter((o) => o.id !== id) }));
+        return { ok: true };
+      } catch {
+        toast.error("Could not delete option");
+        return { ok: false };
+      }
     },
   };
 
@@ -124,19 +140,6 @@ function ProductsPage() {
 
   function openEdit(p: Product) {
     setEditItem(p);
-    setEditForm({
-      name: p.name, category: p.category, sku: p.sku, mrp: String(p.mrp),
-      costPrice: String(p.costPrice), qty: String(p.qty), unit: p.unit,
-      expiryDate: p.expiryDate, status: p.status,
-    });
-  }
-  async function handleSaveEdit() {
-    if (!editItem || !editForm.name || !editForm.mrp) return;
-    const updated = { ...editItem, ...editForm, mrp: Number(editForm.mrp), costPrice: Number(editForm.costPrice) || 0, qty: Number(editForm.qty) || 0 };
-    setProducts(products.map((p) => p.id === editItem.id ? updated : p));
-    setEditItem(null);
-    toast.success("Product updated");
-    try { await updateProduct({ data: updated }); } catch { toast.error("Update failed to save"); }
   }
 
   function openStockIn(productId = "") {
@@ -165,7 +168,17 @@ function ProductsPage() {
     try { await deleteProduct({ data: { id: deleteId } }); } catch { toast.error("Delete failed to save"); }
   }
 
-  async function handleAddProduct(product: Product) {
+  async function handleSaveProduct(product: Product) {
+    const isEdit = !!product.id;
+    if (isEdit) {
+      setEditItem(null);
+      setProducts((prev) => prev.map((p) => p.id === product.id ? product : p));
+      toast.success("Product updated", { description: product.name });
+      try { await updateProduct({ data: product as Product & { id: string } }); } catch (err) {
+        toast.error("Update failed to save", { description: err instanceof Error ? err.message : "Please try again." });
+      }
+      return;
+    }
     setAddOpen(false);
     try {
       const saved = (await createProduct({ data: product })) as unknown as Product;
@@ -372,7 +385,17 @@ function ProductsPage() {
       <AddProductDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onAdd={handleAddProduct}
+        onSave={handleSaveProduct}
+        options={options}
+        handlers={optionHandlers}
+      />
+
+      {/* Edit Product — same dynamic form, pre-filled */}
+      <AddProductDialog
+        open={!!editItem}
+        onClose={() => setEditItem(null)}
+        onSave={handleSaveProduct}
+        editProduct={editItem}
         options={options}
         handlers={optionHandlers}
       />
@@ -393,71 +416,6 @@ function ProductsPage() {
         onClose={() => setOfferTargetId(null)}
         onSave={(offer) => offerTargetId && handleSetOffer(offerTargetId, offer)}
       />
-
-      {/* Edit Dialog */}
-      <Dialog open={!!editItem} onOpenChange={(o) => !o && setEditItem(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Edit Product</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Product Name</Label>
-              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Category</Label>
-                <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>SKU</Label>
-                <Input value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>MRP (₹)</Label>
-                <Input type="number" value={editForm.mrp} onChange={(e) => setEditForm({ ...editForm, mrp: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Cost Price (₹)</Label>
-                <Input type="number" value={editForm.costPrice} onChange={(e) => setEditForm({ ...editForm, costPrice: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label>Quantity</Label>
-                <Input type="number" value={editForm.qty} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Unit</Label>
-                <Input value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v as Product["status"] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Discontinued">Discontinued</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Expiry Date</Label>
-              <Input type="date" value={editForm.expiryDate} onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={!editForm.name || !editForm.mrp}>Save changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete AlertDialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>

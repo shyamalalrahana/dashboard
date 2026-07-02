@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, ArrowUpCircle, Eye, Package, Pencil, Percent, Plus, Search, Tag, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, Eye, Package, Pencil, Percent, Plus, Search, Tag, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { AddProductDialog, type MasterOption, type MasterOptions } from "@/components/add-product-dialog";
 import { PageShell } from "@/components/page-shell";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -24,8 +25,11 @@ import { Switch } from "@/components/ui/switch";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import { loadTaxSettings } from "@/lib/settings-store";
+import { addOption, deleteOption, fetchAllOptions, renameOption, type OptionKind } from "@/lib/options.server";
+import {
+  OFFER_PRESETS, type Product, type ProductOffer,
+  effectivePrice, expiryStatus, fmtINR, formatDate,
+} from "@/lib/product-types";
 import { createProduct, deleteProduct, fetchProducts, updateProduct } from "@/lib/products.server";
 import { cn } from "@/lib/utils";
 
@@ -33,128 +37,15 @@ export const Route = createFileRoute("/products")({
   head: () => ({
     meta: [
       { title: "Products · ShopOS" },
-      { name: "description", content: "Product catalogue with pricing and expiry tracking." },
+      { name: "description", content: "Dynamic product master — pricing, stock, variants, and expiry tracking." },
     ],
   }),
-  loader: () => fetchProducts(),
+  loader: async () => {
+    const [products, options] = await Promise.all([fetchProducts(), fetchAllOptions()]);
+    return { products, options };
+  },
   component: ProductsPage,
 });
-
-// ── Default constants (users can add to these) ────────────────────────────────
-
-const DEFAULT_CATEGORIES = [
-  "Grocery", "Personal Care", "Household", "Beverages", "Snacks",
-  "Dairy", "Electronics", "Ayurvedic", "Clothing", "Hardware", "Other",
-];
-
-const DEFAULT_PRODUCT_TYPES = [
-  "Goods", "Service", "Raw Material", "Finished Product",
-  "Consumable", "Packaging Material",
-];
-
-export const UNITS = [
-  "mg", "g", "kg", "ton",
-  "mL", "L",
-  "Piece", "Box", "Bottle", "Packet", "Carton", "Dozen", "Bundle", "Pair",
-  "Tablet", "Capsule", "Strip", "Vial",
-  "Meter", "Roll",
-  "Sack", "Bag",
-  "Custom…",
-];
-
-export const GST_RATES = ["0", "3", "5", "12", "18", "28"];
-const OFFER_PRESETS = [5, 10, 15, 20, 25, 30, 50];
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export type ProductOffer = {
-  enabled: boolean;
-  type: "percent" | "flat";
-  value: number;
-  label: string;
-};
-
-export type Product = {
-  id: string;
-  name: string;
-  category: string;
-  brand: string;
-  productType: string;
-  sku: string;
-  barcode: string;
-  mrp: number;
-  sellingPrice: number;
-  costPrice: number;
-  minSellingPrice: number;
-  unit: string;
-  packSize: string;
-  packUnit: string;
-  packDisplayName: string;
-  gstEnabled: boolean;
-  taxMode: string;
-  gstRate: string;
-  hsn: string;
-  qty: number;
-  minStock: number;
-  reorderLevel: number;
-  location: string;
-  expiryTracking: boolean;
-  shelfLife: string;
-  expiryDate: string;
-  description: string;
-  notes: string;
-  offer: ProductOffer;
-  status: "Active" | "Inactive" | "Discontinued";
-  createdAt: string;
-};
-
-type AddProductForm = {
-  name: string;
-  skuMode: "auto" | "manual";
-  sku: string;
-  barcode: string;
-  category: string;
-  brand: string;
-  productType: string;
-  status: "Active" | "Inactive" | "Discontinued";
-  unit: string;
-  customUnit: string;
-  packSize: string;
-  packUnit: string;
-  packDisplayName: string;
-  costPrice: string;
-  sellingPrice: string;
-  mrp: string;
-  minSellingPrice: string;
-  gstEnabled: boolean;
-  taxMode: string;
-  gstRate: string;
-  hsn: string;
-  openingStock: string;
-  minStock: string;
-  reorderLevel: string;
-  location: string;
-  expiryTracking: boolean;
-  shelfLife: string;
-  expiryDate: string;
-  description: string;
-  notes: string;
-  offerEnabled: boolean;
-  offerType: "percent" | "flat";
-  offerValue: string;
-  offerLabel: string;
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-let idCounter = 7;
-function nextId() { return `PRD-${String(idCounter++).padStart(3, "0")}`; }
-
-function generateSku(name: string, category: string): string {
-  const part = ((category.slice(0, 2) + name.replace(/\s+/g, "").slice(0, 4))
-    .toUpperCase().replace(/[^A-Z0-9]/g, ""));
-  return `${part}-${String(Math.floor(Math.random() * 900) + 100)}`;
-}
 
 function fmtDateTime(iso: string) {
   const d = new Date(iso);
@@ -162,39 +53,12 @@ function fmtDateTime(iso: string) {
     " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
-function expiryStatus(dateStr: string) {
-  if (!dateStr) return "ok";
-  const days = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
-  if (days < 0) return "expired";
-  if (days <= 90) return "expiring";
-  return "ok";
-}
-
-function formatDate(dateStr: string) {
-  if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function fmtINR(n: number) {
-  return "₹" + n.toLocaleString("en-IN");
-}
-
-function effectivePrice(product: Product): number {
-  const base = product.sellingPrice || product.mrp;
-  if (!product.offer.enabled || product.offer.value <= 0) return base;
-  if (product.offer.type === "percent") return Math.round(base * (1 - product.offer.value / 100));
-  return Math.max(0, base - product.offer.value);
-}
-
-// ── Seed data ─────────────────────────────────────────────────────────────────
-
-const NO_OFFER: ProductOffer = { enabled: false, type: "percent", value: 0, label: "" };
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export function ProductsPage() {
-  const dbProducts = Route.useLoaderData() as unknown as Product[];
-  const [products, setProducts] = useState<Product[]>(dbProducts ?? []);
+function ProductsPage() {
+  const loaderData = Route.useLoaderData();
+  const [products, setProducts] = useState<Product[]>((loaderData.products as unknown as Product[]) ?? []);
+  const [options, setOptions] = useState<MasterOptions>(loaderData.options ?? {});
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -209,17 +73,42 @@ export function ProductsPage() {
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
   const [offerTargetId, setOfferTargetId] = useState<string | null>(null);
 
-  // Customisable option lists
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
-  const [productTypes, setProductTypes] = useState(DEFAULT_PRODUCT_TYPES);
-  const [brands, setBrands] = useState<string[]>([]);
-
   const [editForm, setEditForm] = useState({
-    name: "", category: "Grocery", sku: "", mrp: "", costPrice: "", qty: "", unit: "pkt",
+    name: "", category: "", sku: "", mrp: "", costPrice: "", qty: "", unit: "Piece",
     expiryDate: "", status: "Active" as Product["status"],
   });
 
   const newRowRef = useRef<HTMLTableRowElement>(null);
+
+  const categories = (options.category ?? []).map((o) => o.value);
+
+  // ── Master-data handlers (shared by every editable dropdown) ────────────────
+  const optionHandlers = {
+    onAddOption: async (kind: string, value: string): Promise<MasterOption | null> => {
+      try {
+        const created = await addOption({ data: { kind: kind as OptionKind, value } });
+        if (created) {
+          setOptions((prev) => ({ ...prev, [kind]: [...(prev[kind] ?? []), created] }));
+          toast.success(`Added "${value}"`);
+        }
+        return created;
+      } catch {
+        toast.error("Could not add option");
+        return null;
+      }
+    },
+    onRenameOption: async (kind: string, id: string, value: string) => {
+      setOptions((prev) => ({
+        ...prev,
+        [kind]: (prev[kind] ?? []).map((o) => (o.id === id ? { ...o, value } : o)),
+      }));
+      try { await renameOption({ data: { id, value } }); } catch { toast.error("Rename failed to save"); }
+    },
+    onDeleteOption: async (kind: string, id: string) => {
+      setOptions((prev) => ({ ...prev, [kind]: (prev[kind] ?? []).filter((o) => o.id !== id) }));
+      try { await deleteOption({ data: { id } }); } catch { toast.error("Delete failed to save"); }
+    },
+  };
 
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase();
@@ -247,7 +136,7 @@ export function ProductsPage() {
     setProducts(products.map((p) => p.id === editItem.id ? updated : p));
     setEditItem(null);
     toast.success("Product updated");
-    try { await updateProduct({ data: updated }); } catch { /* silent — local state already updated */ }
+    try { await updateProduct({ data: updated }); } catch { toast.error("Update failed to save"); }
   }
 
   function openStockIn(productId = "") {
@@ -265,7 +154,7 @@ export function ProductsPage() {
     setProducts(products.map((p) => p.id === product.id ? updated : p));
     toast.success("Stock added", { description: `+${added} ${product.unit} · ${product.name} · New total: ${newQty}` });
     setStockInOpen(false);
-    try { await updateProduct({ data: updated }); } catch { /* silent */ }
+    try { await updateProduct({ data: updated }); } catch { toast.error("Stock update failed to save"); }
   }
 
   async function handleDelete() {
@@ -273,7 +162,7 @@ export function ProductsPage() {
     setProducts(products.filter((p) => p.id !== deleteId));
     setDeleteId(null);
     toast.success("Product deleted");
-    try { await deleteProduct({ data: { id: deleteId } }); } catch { /* silent */ }
+    try { await deleteProduct({ data: { id: deleteId } }); } catch { toast.error("Delete failed to save"); }
   }
 
   async function handleAddProduct(product: Product) {
@@ -296,14 +185,14 @@ export function ProductsPage() {
     setOfferTargetId(null);
     toast.success(offer.enabled ? `Offer set: ${offer.value}${offer.type === "percent" ? "%" : "₹"} off` : "Offer removed");
     if (product) {
-      try { await updateProduct({ data: { ...product, offer } }); } catch { /* silent */ }
+      try { await updateProduct({ data: { ...product, offer } }); } catch { toast.error("Offer failed to save"); }
     }
   }
 
   return (
     <PageShell
       title="Products"
-      description="Manage your product catalogue — pricing, stock, and expiry dates."
+      description="Dynamic product master — pricing, stock, variants, and expiry tracking."
       actions={
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openStockIn()}>
@@ -361,12 +250,12 @@ export function ProductsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product ID</TableHead>
+                <TableHead>SKU</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">MRP (₹)</TableHead>
                 <TableHead className="text-right">Price (₹)</TableHead>
-                <TableHead className="text-right">Quantity</TableHead>
+                <TableHead className="text-right">Stock</TableHead>
                 <TableHead>Offer</TableHead>
                 <TableHead>Expiry</TableHead>
                 <TableHead>Status</TableHead>
@@ -374,6 +263,13 @@ export function ProductsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {filteredProducts.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={10} className="py-10 text-center text-muted-foreground text-sm">
+                    No products yet. Click “Add Product” to create your first one.
+                  </TableCell>
+                </TableRow>
+              )}
               {filteredProducts.map((p) => {
                 const exp = expiryStatus(p.expiryDate);
                 const isNew = p.id === newlyAddedId;
@@ -386,7 +282,7 @@ export function ProductsPage() {
                   >
                     <TableCell>
                       <span className="inline-flex items-center whitespace-nowrap rounded-md border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                        {p.id}
+                        {p.sku}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -396,8 +292,11 @@ export function ProductsPage() {
                       >
                         {p.name}
                       </button>
+                      {p.hasVariants && p.variants.items.length > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground">({p.variants.items.length} variants)</span>
+                      )}
                     </TableCell>
-                    <TableCell><Badge variant="secondary">{p.category}</Badge></TableCell>
+                    <TableCell><Badge variant="secondary">{p.category || "—"}</Badge></TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {p.offer.enabled && p.offer.value > 0
                         ? <span className="line-through text-muted-foreground text-xs">{p.mrp.toLocaleString("en-IN")}</span>
@@ -469,20 +368,13 @@ export function ProductsPage() {
         </CardContent>
       </Card>
 
-      {/* Add Product — multi-section dialog */}
+      {/* Add Product — dynamic product master */}
       <AddProductDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onAdd={handleAddProduct}
-        categories={categories}
-        productTypes={productTypes}
-        brands={brands}
-        onAddCategory={(v) => setCategories([...categories, v])}
-        onDeleteCategory={(v) => setCategories(categories.filter((c) => c !== v && DEFAULT_CATEGORIES.includes(c) ? true : c !== v))}
-        onAddProductType={(v) => setProductTypes([...productTypes, v])}
-        onDeleteProductType={(v) => setProductTypes(productTypes.filter((t) => t !== v && DEFAULT_PRODUCT_TYPES.includes(t) ? true : t !== v))}
-        onAddBrand={(v) => setBrands([...brands, v])}
-        onDeleteBrand={(v) => setBrands(brands.filter((b) => b !== v))}
+        options={options}
+        handlers={optionHandlers}
       />
 
       {/* View dialog */}
@@ -650,6 +542,16 @@ function ViewRow({ label, value }: { label: string; value?: string | number | bo
   );
 }
 
+function ViewSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{title}</p>
+      <Separator className="mb-3" />
+      {children}
+    </div>
+  );
+}
+
 function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
   product: Product | null;
   open: boolean;
@@ -664,14 +566,13 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
         {p && <>
-        {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-border">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold">{p.name}</h2>
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className="text-xs text-muted-foreground font-mono border border-border rounded px-2 py-0.5">{p.id}</span>
-                <Badge variant="secondary">{p.category}</Badge>
+                <span className="text-xs text-muted-foreground font-mono border border-border rounded px-2 py-0.5">{p.sku}</span>
+                <Badge variant="secondary">{p.category || "—"}</Badge>
                 <Badge variant={p.status === "Active" ? "default" : p.status === "Inactive" ? "secondary" : "outline"}>
                   {p.status}
                 </Badge>
@@ -695,10 +596,13 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
           </div>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          {p.images.primary && (
+            <div className="h-36 w-36 rounded-lg border border-border overflow-hidden bg-muted">
+              <img src={p.images.primary} alt={p.name} className="h-full w-full object-cover" />
+            </div>
+          )}
 
-          {/* Pricing highlight */}
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-lg border border-border p-3 text-center">
               <p className="text-xs text-muted-foreground mb-1">MRP</p>
@@ -714,54 +618,94 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
             </div>
           </div>
 
-          {/* Sections */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Basic</p>
-            <Separator className="mb-3" />
+          <ViewSection title="Basic">
             <ViewRow label="SKU" value={p.sku} />
             <ViewRow label="Barcode" value={p.barcode} />
             <ViewRow label="Brand" value={p.brand} />
             <ViewRow label="Product Type" value={p.productType} />
+            <ViewRow label="Description" value={p.description} />
             <ViewRow label="Added On" value={fmtDateTime(p.createdAt)} />
-          </div>
+          </ViewSection>
 
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Unit & Packaging</p>
-            <Separator className="mb-3" />
+          <ViewSection title="Unit & Packaging">
             <ViewRow label="Primary Unit" value={p.unit} />
             <ViewRow label="Pack Display Name" value={p.packDisplayName} />
             <ViewRow label="Pack Size" value={p.packSize ? `${p.packSize} ${p.packUnit}` : undefined} />
-          </div>
+          </ViewSection>
 
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Pricing</p>
-            <Separator className="mb-3" />
-            <ViewRow label="Cost Price" value={fmtINR(p.costPrice)} />
+          <ViewSection title="Pricing">
+            <ViewRow label="Purchase Price" value={p.costPrice ? fmtINR(p.costPrice) : undefined} />
             <ViewRow label="Min. Selling Price" value={p.minSellingPrice ? fmtINR(p.minSellingPrice) : undefined} />
+            <ViewRow label="Wholesale Price" value={p.wholesalePrice ? fmtINR(p.wholesalePrice) : undefined} />
+            <ViewRow label="Distributor Price" value={p.distributorPrice ? fmtINR(p.distributorPrice) : undefined} />
             <ViewRow label="Margin" value={p.costPrice && p.mrp ? `${fmtINR(p.mrp - p.costPrice)} (${((p.mrp - p.costPrice) / p.mrp * 100).toFixed(1)}%)` : undefined} />
-          </div>
+          </ViewSection>
 
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Tax</p>
-            <Separator className="mb-3" />
-            <ViewRow label="GST" value={p.gstEnabled ? `${p.gstRate}% (${p.taxMode})` : "Not applicable"} />
+          <ViewSection title="Tax">
+            <ViewRow label="Tax" value={p.gstEnabled ? (p.taxProfile || `${p.gstRate}%`) + ` (${p.taxMode})` : "Not applicable"} />
             <ViewRow label="HSN / SAC Code" value={p.hsn} />
-          </div>
+          </ViewSection>
 
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Inventory</p>
-            <Separator className="mb-3" />
+          <ViewSection title="Inventory">
             <ViewRow label="Current Stock" value={`${p.qty} ${p.unit}`} />
             <ViewRow label="Min. Stock" value={p.minStock ? `${p.minStock} ${p.unit}` : undefined} />
+            <ViewRow label="Max. Stock" value={p.maxStock ? `${p.maxStock} ${p.unit}` : undefined} />
             <ViewRow label="Reorder Level" value={p.reorderLevel ? `${p.reorderLevel} ${p.unit}` : undefined} />
+            <ViewRow label="Warehouse" value={p.warehouse} />
             <ViewRow label="Location" value={p.location} />
-          </div>
+            <ViewRow label="Rack / Bin" value={p.rack || p.bin ? [p.rack, p.bin].filter(Boolean).join(" / ") : undefined} />
+          </ViewSection>
+
+          {p.attributes.length > 0 && (
+            <ViewSection title="Custom Attributes">
+              {p.attributes.map((a, i) => <ViewRow key={i} label={a.name} value={a.value} />)}
+            </ViewSection>
+          )}
+
+          {p.hasVariants && p.variants.items.length > 0 && (
+            <ViewSection title={`Variants (${p.variants.items.length})`}>
+              <div className="rounded-lg border border-border divide-y divide-border">
+                <div className="grid grid-cols-[1fr_110px_80px_70px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <span>Variant</span><span>SKU</span><span>Price</span><span>Stock</span>
+                </div>
+                {p.variants.items.map((v, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_110px_80px_70px] gap-2 px-3 py-1.5 text-sm">
+                    <span className="truncate">{v.name}</span>
+                    <span className="text-xs text-muted-foreground font-mono">{v.sku}</span>
+                    <span className="tabular-nums">{fmtINR(v.price)}</span>
+                    <span className="tabular-nums">{v.stock}</span>
+                  </div>
+                ))}
+              </div>
+            </ViewSection>
+          )}
+
+          {(p.supplierName || p.supplierCode || p.leadTime || p.minOrder) && (
+            <ViewSection title="Supplier">
+              <ViewRow label="Default Supplier" value={p.supplierName} />
+              <ViewRow label="Supplier Code" value={p.supplierCode} />
+              <ViewRow label="Lead Time" value={p.leadTime} />
+              <ViewRow label="Minimum Order" value={p.minOrder} />
+            </ViewSection>
+          )}
+
+          {(Object.values(p.modules).some(Boolean) || p.expiryTracking) && (
+            <ViewSection title="Enabled Modules">
+              <div className="flex flex-wrap gap-1.5">
+                {p.modules.batch && <Badge variant="outline">Batch Tracking</Badge>}
+                {p.expiryTracking && <Badge variant="outline">Expiry Tracking</Badge>}
+                {p.modules.serial && <Badge variant="outline">Serial Number</Badge>}
+                {p.modules.warranty && <Badge variant="outline">Warranty{p.warranty ? `: ${p.warranty}` : ""}</Badge>}
+                {p.modules.manufacturing && <Badge variant="outline">Manufacturing</Badge>}
+                {p.modules.service && <Badge variant="outline">Service Item</Badge>}
+              </div>
+            </ViewSection>
+          )}
 
           {p.expiryTracking && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Expiry</p>
-              <Separator className="mb-3" />
+            <ViewSection title="Expiry">
               <ViewRow label="Shelf Life" value={p.shelfLife} />
+              <ViewRow label="Manufacturing Date" value={p.mfgDate ? formatDate(p.mfgDate) : undefined} />
               <div className="flex gap-3 text-sm py-1.5">
                 <span className="w-40 shrink-0 text-muted-foreground">Expiry Date</span>
                 <span className={cn("font-medium", exp === "expired" ? "text-destructive" : exp === "expiring" ? "text-warning" : "")}>
@@ -770,13 +714,11 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
                   {exp === "expiring" && " (Expiring Soon)"}
                 </span>
               </div>
-            </div>
+            </ViewSection>
           )}
 
           {p.offer.enabled && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Active Offer</p>
-              <Separator className="mb-3" />
+            <ViewSection title="Active Offer">
               <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-4 py-3 flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-orange-700 dark:text-orange-400 text-sm">
@@ -790,16 +732,13 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
                 </div>
                 <Percent className="h-8 w-8 text-orange-300" />
               </div>
-            </div>
+            </ViewSection>
           )}
 
-          {(p.description || p.notes) && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Notes</p>
-              <Separator className="mb-3" />
-              {p.description && <ViewRow label="Description" value={p.description} />}
-              {p.notes && <ViewRow label="Internal Notes" value={p.notes} />}
-            </div>
+          {p.notes && (
+            <ViewSection title="Notes">
+              <ViewRow label="Internal Notes" value={p.notes} />
+            </ViewSection>
           )}
         </div>
 
@@ -832,6 +771,7 @@ function SetOfferDialog({ product, open, onClose, onSave }: {
       setValue(product.offer.value > 0 ? String(product.offer.value) : "");
       setLabel(product.offer.label);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
   const base = product ? (product.sellingPrice || product.mrp) : 0;
@@ -861,7 +801,6 @@ function SetOfferDialog({ product, open, onClose, onSave }: {
 
           {enabled && (
             <>
-              {/* Preset quick-select */}
               <div>
                 <p className="text-xs text-muted-foreground mb-2">Quick presets (% off)</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -894,36 +833,22 @@ function SetOfferDialog({ product, open, onClose, onSave }: {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Value {type === "percent" ? "(%)" : "(₹)"}</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max={type === "percent" ? 100 : undefined}
-                    placeholder={type === "percent" ? "10" : "20"}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                  />
+                  <Label className="text-sm">Value</Label>
+                  <Input type="number" min="0" placeholder={type === "percent" ? "e.g. 10" : "e.g. 50"} value={value} onChange={(e) => setValue(e.target.value)} />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm">Offer Label <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
-                <Input placeholder="e.g. Weekend Sale, Clearance…" value={label} onChange={(e) => setLabel(e.target.value)} />
+                <Label className="text-sm">Offer Label <span className="text-muted-foreground text-xs font-normal">(optional)</span></Label>
+                <Input placeholder="e.g. Weekend Sale" value={label} onChange={(e) => setLabel(e.target.value)} />
               </div>
 
-              {numVal > 0 && (
-                <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-3 py-2.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">MRP</span>
-                    <span className="line-through text-muted-foreground">{fmtINR(product.mrp)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="font-semibold text-orange-700 dark:text-orange-400">
-                      After {numVal}{type === "percent" ? "%" : "₹"} off
-                    </span>
-                    <span className="font-bold text-orange-700 dark:text-orange-400">{fmtINR(ep)}</span>
-                  </div>
-                  {type === "percent" && <p className="text-xs text-orange-600 dark:text-orange-500 mt-0.5">Customer saves {fmtINR(product.mrp - ep)}</p>}
+              {numVal > 0 && base > 0 && (
+                <div className="rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900 px-3 py-2.5 flex items-center gap-2 text-sm">
+                  <Tag className="h-4 w-4 text-orange-500" />
+                  <span className="text-muted-foreground line-through">{fmtINR(base)}</span>
+                  <span className="font-semibold text-orange-600 dark:text-orange-400">{fmtINR(ep)}</span>
+                  <span className="text-xs text-muted-foreground">after offer</span>
                 </div>
               )}
             </>
@@ -945,624 +870,17 @@ function SetOfferDialog({ product, open, onClose, onSave }: {
   );
 }
 
-// ── EditableSelect — dropdown with inline add/delete ──────────────────────────
-
-function EditableSelect({
-  value, defaultOptions, extraOptions, onValueChange, onAdd, onDelete, label, required,
-}: {
-  value: string;
-  defaultOptions: string[];
-  extraOptions: string[];
-  onValueChange: (v: string) => void;
-  onAdd: (v: string) => void;
-  onDelete: (v: string) => void;
-  label: string;
-  required?: boolean;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [newOpt, setNewOpt] = useState("");
-  const allOptions = [...defaultOptions, ...extraOptions];
-
-  function handleAdd() {
-    const t = newOpt.trim();
-    if (!t || allOptions.includes(t)) return;
-    onAdd(t);
-    onValueChange(t);
-    setNewOpt("");
-    setAdding(false);
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm">
-        {label} {required && <span className="text-destructive">*</span>}
-      </Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {defaultOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-          {extraOptions.length > 0 && (
-            <>
-              <div className="px-2 py-1 text-xs text-muted-foreground border-t mt-1">Custom</div>
-              {extraOptions.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-            </>
-          )}
-        </SelectContent>
-      </Select>
-      {/* Custom options chips */}
-      {extraOptions.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {extraOptions.map((o) => (
-            <span key={o} className="inline-flex items-center gap-1 text-xs bg-muted rounded-full px-2.5 py-0.5">
-              {o}
-              <button
-                type="button"
-                onClick={() => { onDelete(o); if (value === o) onValueChange(defaultOptions[0] || ""); }}
-                className="text-muted-foreground hover:text-destructive ml-0.5"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {/* Add new option */}
-      {adding ? (
-        <div className="flex gap-1.5">
-          <Input
-            className="h-7 text-xs"
-            placeholder={`New ${label.toLowerCase()}…`}
-            value={newOpt}
-            onChange={(e) => setNewOpt(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAdding(false); setNewOpt(""); } }}
-            autoFocus
-          />
-          <Button type="button" size="sm" className="h-7 px-2.5 text-xs" onClick={handleAdd} disabled={!newOpt.trim()}>Add</Button>
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setAdding(false); setNewOpt(""); }}>
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      ) : (
-        <button type="button" onClick={() => setAdding(true)} className="text-xs text-primary hover:underline underline-offset-2">
-          + Add custom {label.toLowerCase()}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── Add Product Dialog (multi-section) ───────────────────────────────────────
-
-const NAV_SECTIONS = [
-  { key: "basic",     label: "Basic Info" },
-  { key: "unit",      label: "Unit & Packaging" },
-  { key: "pricing",   label: "Pricing" },
-  { key: "tax",       label: "Tax" },
-  { key: "inventory", label: "Inventory" },
-  { key: "expiry",    label: "Expiry" },
-  { key: "offers",    label: "Offers" },
-  { key: "notes",     label: "Notes" },
-] as const;
-
-type SectionKey = typeof NAV_SECTIONS[number]["key"];
-
-function buildDefaultForm(): AddProductForm {
-  const tax = loadTaxSettings();
-  return {
-    name: "", skuMode: "auto", sku: "", barcode: "",
-    category: "Grocery", brand: "", productType: "Goods", status: "Active",
-    unit: "Piece", customUnit: "",
-    packSize: "", packUnit: "", packDisplayName: "",
-    costPrice: "", sellingPrice: "", mrp: "", minSellingPrice: "",
-    gstEnabled: tax.gstEnabled, taxMode: tax.taxMode, gstRate: tax.defaultRate, hsn: "",
-    openingStock: "", minStock: "", reorderLevel: "", location: "",
-    expiryTracking: false, shelfLife: "", expiryDate: "",
-    description: "", notes: "",
-    offerEnabled: false, offerType: "percent", offerValue: "", offerLabel: "",
-  };
-}
-
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3">{children}</h3>
-      <Separator />
-    </div>
-  );
-}
-
-function FieldRow({ children, cols = 2 }: { children: React.ReactNode; cols?: number }) {
-  return (
-    <div className={cn("grid gap-4 mb-4", cols === 1 ? "grid-cols-1" : cols === 3 ? "grid-cols-3" : cols === 4 ? "grid-cols-4" : "grid-cols-2")}>
-      {children}
-    </div>
-  );
-}
-
-function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm">
-        {label} {required && <span className="text-destructive">*</span>}
-        {hint && <span className="text-muted-foreground font-normal ml-1 text-xs">({hint})</span>}
-      </Label>
-      {children}
-    </div>
-  );
-}
-
-function AddProductDialog({ open, onClose, onAdd, categories, productTypes, brands, onAddCategory, onDeleteCategory, onAddProductType, onDeleteProductType, onAddBrand, onDeleteBrand }: {
-  open: boolean;
-  onClose: () => void;
-  onAdd: (p: Product) => void;
-  categories: string[];
-  productTypes: string[];
-  brands: string[];
-  onAddCategory: (v: string) => void;
-  onDeleteCategory: (v: string) => void;
-  onAddProductType: (v: string) => void;
-  onDeleteProductType: (v: string) => void;
-  onAddBrand: (v: string) => void;
-  onDeleteBrand: (v: string) => void;
-}) {
-  const [form, setForm] = useState<AddProductForm>(buildDefaultForm);
-  const [activeSection, setActiveSection] = useState<SectionKey>("basic");
-
-  const basicRef = useRef<HTMLDivElement>(null);
-  const unitRef = useRef<HTMLDivElement>(null);
-  const pricingRef = useRef<HTMLDivElement>(null);
-  const taxRef = useRef<HTMLDivElement>(null);
-  const inventoryRef = useRef<HTMLDivElement>(null);
-  const expiryRef = useRef<HTMLDivElement>(null);
-  const offersRef = useRef<HTMLDivElement>(null);
-  const notesRef = useRef<HTMLDivElement>(null);
-
-  const sectionRefs: Record<SectionKey, React.RefObject<HTMLDivElement | null>> = {
-    basic: basicRef, unit: unitRef, pricing: pricingRef, tax: taxRef,
-    inventory: inventoryRef, expiry: expiryRef, offers: offersRef, notes: notesRef,
-  };
-
-  useEffect(() => {
-    if (open) { setForm(buildDefaultForm()); setActiveSection("basic"); }
-  }, [open]);
-
-  useEffect(() => {
-    if (form.skuMode === "auto" && form.name) {
-      setForm((f) => ({ ...f, sku: generateSku(f.name, f.category) }));
-    }
-  }, [form.name, form.category, form.skuMode]);
-
-  function scrollTo(key: SectionKey) {
-    setActiveSection(key);
-    sectionRefs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function set<K extends keyof AddProductForm>(key: K, val: AddProductForm[K]) {
-    setForm((f) => ({ ...f, [key]: val }));
-  }
-
-  const effectiveUnit = form.unit === "Custom…" ? form.customUnit : form.unit;
-  const numOffer = Number(form.offerValue) || 0;
-  const numMrp = Number(form.mrp) || 0;
-  const numCost = Number(form.costPrice) || 0;
-  const offerPreviewPrice = form.offerEnabled && numOffer > 0
-    ? (form.offerType === "percent" ? Math.round(numMrp * (1 - numOffer / 100)) : Math.max(0, numMrp - numOffer))
-    : numMrp;
-
-  function handleSubmit() {
-    if (!form.name || !form.mrp) return;
-    const product: Product = {
-      id: nextId(),
-      name: form.name,
-      category: form.category,
-      brand: form.brand,
-      productType: form.productType,
-      sku: form.sku || generateSku(form.name, form.category),
-      barcode: form.barcode,
-      mrp: numMrp,
-      sellingPrice: Number(form.sellingPrice) || numMrp,
-      costPrice: numCost,
-      minSellingPrice: Number(form.minSellingPrice) || 0,
-      unit: effectiveUnit || "Piece",
-      packSize: form.packSize,
-      packUnit: form.packUnit,
-      packDisplayName: form.packDisplayName,
-      gstEnabled: form.gstEnabled,
-      taxMode: form.taxMode,
-      gstRate: form.gstRate,
-      hsn: form.hsn,
-      qty: Number(form.openingStock) || 0,
-      minStock: Number(form.minStock) || 0,
-      reorderLevel: Number(form.reorderLevel) || 0,
-      location: form.location,
-      expiryTracking: form.expiryTracking,
-      shelfLife: form.shelfLife,
-      expiryDate: form.expiryDate,
-      description: form.description,
-      notes: form.notes,
-      offer: {
-        enabled: form.offerEnabled && numOffer > 0,
-        type: form.offerType,
-        value: numOffer,
-        label: form.offerLabel,
-      },
-      status: form.status,
-      createdAt: new Date().toISOString(),
-    };
-    onAdd(product);
-  }
-
-  const canSubmit = !!form.name && !!form.mrp;
-  const customCategories = categories.filter((c) => !DEFAULT_CATEGORIES.includes(c));
-  const customProductTypes = productTypes.filter((t) => !DEFAULT_PRODUCT_TYPES.includes(t));
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-4xl p-0 gap-0 flex flex-col max-h-[90vh] overflow-hidden">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <DialogTitle className="text-lg">Add Product</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-0.5">Fill in the details. Only Name and MRP are required.</p>
-        </DialogHeader>
-
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Left nav */}
-          <nav className="w-44 border-r border-border py-4 px-2 shrink-0 overflow-y-auto">
-            {NAV_SECTIONS.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => scrollTo(s.key)}
-                className={cn(
-                  "w-full text-left px-3 py-2 text-sm rounded-md transition-colors mb-0.5",
-                  s.key === "offers" && "text-orange-600 dark:text-orange-400",
-                  activeSection === s.key
-                    ? s.key === "offers" ? "bg-orange-100 dark:bg-orange-900/30 font-medium" : "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
-          </nav>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-8">
-
-            {/* 1. Basic */}
-            <div ref={basicRef} className="scroll-mt-2">
-              <SectionHeader>1. Basic Information</SectionHeader>
-              <FieldRow cols={1}>
-                <Field label="Product Name" required>
-                  <Input placeholder="e.g. Sunflower Oil 1L" value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
-                </Field>
-              </FieldRow>
-              <FieldRow>
-                <div className="space-y-1.5">
-                  <Label className="text-sm">
-                    SKU
-                    <button type="button" className="ml-2 text-xs text-primary underline-offset-2 hover:underline"
-                      onClick={() => set("skuMode", form.skuMode === "auto" ? "manual" : "auto")}>
-                      {form.skuMode === "auto" ? "Switch to manual" : "Auto-generate"}
-                    </button>
-                  </Label>
-                  <Input placeholder="e.g. SOL-001" value={form.sku} readOnly={form.skuMode === "auto"}
-                    onChange={(e) => set("sku", e.target.value)}
-                    className={form.skuMode === "auto" ? "bg-muted text-muted-foreground" : ""} />
-                </div>
-                <Field label="Barcode" hint="optional">
-                  <Input placeholder="Scan or type…" value={form.barcode} onChange={(e) => set("barcode", e.target.value)} />
-                </Field>
-              </FieldRow>
-              <FieldRow>
-                <EditableSelect
-                  label="Category" required
-                  value={form.category}
-                  defaultOptions={DEFAULT_CATEGORIES}
-                  extraOptions={customCategories}
-                  onValueChange={(v) => set("category", v)}
-                  onAdd={onAddCategory}
-                  onDelete={onDeleteCategory}
-                />
-                <Field label="Brand" hint="optional">
-                  {brands.length > 0 ? (
-                    <EditableSelect
-                      label="Brand"
-                      value={form.brand}
-                      defaultOptions={[]}
-                      extraOptions={brands}
-                      onValueChange={(v) => set("brand", v)}
-                      onAdd={onAddBrand}
-                      onDelete={onDeleteBrand}
-                    />
-                  ) : (
-                    <div className="space-y-1">
-                      <Input placeholder="e.g. Fortune, Aashirvaad…" value={form.brand}
-                        onChange={(e) => { set("brand", e.target.value); if (e.target.value.trim()) onAddBrand(e.target.value.trim()); }} />
-                    </div>
-                  )}
-                </Field>
-              </FieldRow>
-              <FieldRow>
-                <EditableSelect
-                  label="Product Type" required
-                  value={form.productType}
-                  defaultOptions={DEFAULT_PRODUCT_TYPES}
-                  extraOptions={customProductTypes}
-                  onValueChange={(v) => set("productType", v)}
-                  onAdd={onAddProductType}
-                  onDelete={onDeleteProductType}
-                />
-                <Field label="Status">
-                  <Select value={form.status} onValueChange={(v) => set("status", v as Product["status"])}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="Inactive">Inactive</SelectItem>
-                      <SelectItem value="Discontinued">Discontinued</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </FieldRow>
-            </div>
-
-            {/* 2. Unit */}
-            <div ref={unitRef} className="scroll-mt-2">
-              <SectionHeader>2. Unit &amp; Packaging</SectionHeader>
-              <FieldRow>
-                <Field label="Primary Unit" required>
-                  <Select value={form.unit} onValueChange={(v) => set("unit", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                  </Select>
-                </Field>
-                {form.unit === "Custom…" && (
-                  <Field label="Custom Unit Name" required>
-                    <Input placeholder="e.g. Drum, Jar, Pouch…" value={form.customUnit} onChange={(e) => set("customUnit", e.target.value)} />
-                  </Field>
-                )}
-              </FieldRow>
-              <p className="text-xs text-muted-foreground mb-3">Optional: describe the packaging for display on invoices.</p>
-              <FieldRow cols={3}>
-                <Field label="Pack Size" hint="optional">
-                  <Input placeholder="500" value={form.packSize} onChange={(e) => set("packSize", e.target.value)} />
-                </Field>
-                <Field label="Pack Unit" hint="optional">
-                  <Input placeholder="mL" value={form.packUnit} onChange={(e) => set("packUnit", e.target.value)} />
-                </Field>
-                <Field label="Display Name" hint="optional">
-                  <Input placeholder={`${form.packSize || "500"} ${form.packUnit || "mL"} ${effectiveUnit || "Bottle"}`}
-                    value={form.packDisplayName} onChange={(e) => set("packDisplayName", e.target.value)} />
-                </Field>
-              </FieldRow>
-              {(form.packSize || form.packUnit) && (
-                <div className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-                  Preview: <span className="text-foreground font-medium">{form.packDisplayName || `${form.packSize} ${form.packUnit} ${effectiveUnit}`.trim()}</span>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Pricing */}
-            <div ref={pricingRef} className="scroll-mt-2">
-              <SectionHeader>3. Pricing</SectionHeader>
-              <FieldRow>
-                <Field label="Purchase Price (₹)" hint="cost">
-                  <Input type="number" placeholder="0.00" value={form.costPrice} onChange={(e) => set("costPrice", e.target.value)} />
-                </Field>
-                <Field label="Selling Price (₹)">
-                  <Input type="number" placeholder="0.00" value={form.sellingPrice} onChange={(e) => set("sellingPrice", e.target.value)} />
-                </Field>
-              </FieldRow>
-              <FieldRow>
-                <Field label="MRP (₹)" required>
-                  <Input type="number" placeholder="0.00" value={form.mrp} onChange={(e) => set("mrp", e.target.value)} />
-                </Field>
-                <Field label="Minimum Selling Price (₹)" hint="optional">
-                  <Input type="number" placeholder="0.00" value={form.minSellingPrice} onChange={(e) => set("minSellingPrice", e.target.value)} />
-                </Field>
-              </FieldRow>
-              {numCost > 0 && numMrp > 0 && (
-                <div className="rounded-lg bg-muted/60 px-3 py-2 text-sm flex gap-4">
-                  <span className="text-muted-foreground">Margin</span>
-                  <span className="font-medium text-success">
-                    ₹{(numMrp - numCost).toFixed(2)} ({((numMrp - numCost) / numMrp * 100).toFixed(1)}%)
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* 4. Tax */}
-            <div ref={taxRef} className="scroll-mt-2">
-              <SectionHeader>4. Tax</SectionHeader>
-              <div className="flex items-center gap-3 mb-4">
-                <Switch checked={form.gstEnabled} onCheckedChange={(v) => set("gstEnabled", v)} id="gst-toggle" />
-                <Label htmlFor="gst-toggle" className="text-sm cursor-pointer">GST Applicable</Label>
-              </div>
-              {form.gstEnabled && (
-                <>
-                  <FieldRow>
-                    <Field label="Tax Mode">
-                      <Select value={form.taxMode} onValueChange={(v) => set("taxMode", v)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Inclusive">Inclusive (GST included in price)</SelectItem>
-                          <SelectItem value="Exclusive">Exclusive (GST added on top)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="GST Rate">
-                      <Select value={form.gstRate} onValueChange={(v) => set("gstRate", v)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{GST_RATES.map((r) => <SelectItem key={r} value={r}>GST {r}%</SelectItem>)}</SelectContent>
-                      </Select>
-                    </Field>
-                  </FieldRow>
-                  <FieldRow cols={1}>
-                    <Field label="HSN / SAC Code" hint="optional">
-                      <Input placeholder="e.g. 30049099" value={form.hsn} onChange={(e) => set("hsn", e.target.value)} />
-                    </Field>
-                  </FieldRow>
-                </>
-              )}
-            </div>
-
-            {/* 5. Inventory */}
-            <div ref={inventoryRef} className="scroll-mt-2">
-              <SectionHeader>5. Inventory &amp; Location</SectionHeader>
-              <FieldRow cols={3}>
-                <Field label="Opening Stock">
-                  <Input type="number" placeholder="0" value={form.openingStock} onChange={(e) => set("openingStock", e.target.value)} />
-                </Field>
-                <Field label="Minimum Stock">
-                  <Input type="number" placeholder="0" value={form.minStock} onChange={(e) => set("minStock", e.target.value)} />
-                </Field>
-                <Field label="Reorder Level">
-                  <Input type="number" placeholder="0" value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} />
-                </Field>
-              </FieldRow>
-              <FieldRow cols={1}>
-                <Field label="Storage Location / Rack" hint="optional">
-                  <Input placeholder="e.g. Aisle 3 · Rack B · Shelf 2" value={form.location} onChange={(e) => set("location", e.target.value)} />
-                </Field>
-              </FieldRow>
-            </div>
-
-            {/* 6. Expiry */}
-            <div ref={expiryRef} className="scroll-mt-2">
-              <SectionHeader>6. Expiry</SectionHeader>
-              <div className="flex items-center gap-3 mb-4">
-                <Switch checked={form.expiryTracking} onCheckedChange={(v) => set("expiryTracking", v)} id="expiry-toggle" />
-                <Label htmlFor="expiry-toggle" className="text-sm cursor-pointer">Track Expiry for this product</Label>
-              </div>
-              {form.expiryTracking && (
-                <FieldRow>
-                  <Field label="Shelf Life" hint="optional">
-                    <Input placeholder="e.g. 24 Months" value={form.shelfLife} onChange={(e) => set("shelfLife", e.target.value)} />
-                  </Field>
-                  <Field label="Expiry Date">
-                    <Input type="date" value={form.expiryDate} onChange={(e) => set("expiryDate", e.target.value)} />
-                  </Field>
-                </FieldRow>
-              )}
-            </div>
-
-            {/* 7. Offers */}
-            <div ref={offersRef} className="scroll-mt-2">
-              <SectionHeader>7. Offers &amp; Discounts</SectionHeader>
-              <div className="flex items-center gap-3 mb-4">
-                <Switch checked={form.offerEnabled} onCheckedChange={(v) => set("offerEnabled", v)} id="offer-toggle" />
-                <Label htmlFor="offer-toggle" className="text-sm cursor-pointer">Enable offer on this product</Label>
-              </div>
-              {form.offerEnabled && (
-                <>
-                  <div className="mb-4">
-                    <p className="text-xs text-muted-foreground mb-2">Quick presets</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {OFFER_PRESETS.map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => { set("offerType", "percent"); set("offerValue", String(pct)); }}
-                          className={cn(
-                            "px-2.5 py-1 text-xs rounded-full border transition-colors",
-                            form.offerValue === String(pct) && form.offerType === "percent"
-                              ? "bg-orange-500 text-white border-orange-500"
-                              : "border-border text-muted-foreground hover:border-orange-400 hover:text-orange-500"
-                          )}
-                        >
-                          {pct}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <FieldRow>
-                    <Field label="Discount Type">
-                      <Select value={form.offerType} onValueChange={(v) => set("offerType", v as "percent" | "flat")}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percent">% Percentage off</SelectItem>
-                          <SelectItem value="flat">₹ Flat amount off</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label={`Discount Value ${form.offerType === "percent" ? "(%)" : "(₹)"}`}>
-                      <Input type="number" placeholder={form.offerType === "percent" ? "10" : "20"}
-                        value={form.offerValue} onChange={(e) => set("offerValue", e.target.value)} />
-                    </Field>
-                  </FieldRow>
-                  <FieldRow cols={1}>
-                    <Field label="Offer Label" hint="optional">
-                      <Input placeholder="e.g. Weekend Sale, Festival Offer, Clearance…"
-                        value={form.offerLabel} onChange={(e) => set("offerLabel", e.target.value)} />
-                    </Field>
-                  </FieldRow>
-                  {numMrp > 0 && numOffer > 0 && (
-                    <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-4 py-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">MRP</span>
-                        <span className="line-through text-muted-foreground">{fmtINR(numMrp)}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm mt-1">
-                        <span className="font-semibold text-orange-700 dark:text-orange-400">
-                          Customer pays ({numOffer}{form.offerType === "percent" ? "%" : "₹"} off)
-                        </span>
-                        <span className="font-bold text-orange-700 dark:text-orange-400 text-base">{fmtINR(offerPreviewPrice)}</span>
-                      </div>
-                      {form.offerType === "percent" && <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Customer saves {fmtINR(numMrp - offerPreviewPrice)}</p>}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* 8. Notes */}
-            <div ref={notesRef} className="scroll-mt-2 pb-4">
-              <SectionHeader>8. Notes</SectionHeader>
-              <FieldRow cols={1}>
-                <Field label="Product Description" hint="optional">
-                  <Textarea placeholder="Customer-facing description…" rows={3}
-                    value={form.description} onChange={(e) => set("description", e.target.value)} />
-                </Field>
-              </FieldRow>
-              <FieldRow cols={1}>
-                <Field label="Internal Notes" hint="optional">
-                  <Textarea placeholder="Internal notes, handling instructions…" rows={2}
-                    value={form.notes} onChange={(e) => set("notes", e.target.value)} />
-                </Field>
-              </FieldRow>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between shrink-0">
-          <p className="text-xs text-muted-foreground">
-            {!form.name && "Product name is required."}
-            {form.name && !form.mrp && "MRP is required."}
-            {canSubmit && <span className="text-success">Ready to save.</span>}
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={!canSubmit}>Save Product</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
 function Stat({ label, value, tone, icon }: { label: string; value: string; tone?: "warning"; icon?: React.ReactNode }) {
   return (
     <Card>
-      <CardContent className="p-5">
+      <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
           {icon && <span className="text-muted-foreground">{icon}</span>}
         </div>
-        <p className={`mt-2 font-display text-2xl font-semibold ${tone === "warning" ? "text-warning" : ""}`}>
-          {value}
-        </p>
+        <p className={cn("mt-2 font-display text-2xl font-bold", tone === "warning" && "text-warning")}>{value}</p>
       </CardContent>
     </Card>
   );

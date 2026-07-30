@@ -18,7 +18,12 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "node scripts/seed.mjs",
     "db:backup": "node scripts/backup.mjs",
-    "staff": "node scripts/staff.mjs"
+    "staff": "node scripts/staff.mjs",
+    "db:restore": "node scripts/restore.mjs",
+    "db:maintenance": "node scripts/maintenance.mjs",
+    "services:install": "node scripts/install-services.mjs install",
+    "services:status": "node scripts/install-services.mjs status",
+    "services:uninstall": "node scripts/install-services.mjs uninstall"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -10,4 +10,15 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  // This ERP runs on the shop's own Mac against a local SQLite file, so it is
+  // built as a plain Node server rather than for Cloudflare Workers — Workers
+  // cannot open a local database, which is what broke the hosted version.
+  nitro: { preset: "node-server" },
+  vite: {
+    build: {
+      // better-sqlite3 is a native module: it must stay external and be
+      // required at runtime rather than bundled.
+      rollupOptions: { external: ["better-sqlite3"] },
+    },
+  },
 });

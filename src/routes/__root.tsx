@@ -261,7 +261,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background">
-          <AppSidebar />
+          <AppSidebar isAdmin={user?.role === "admin"} />
           <div className="flex min-w-0 flex-1 flex-col">
             <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur">
               <SidebarTrigger />

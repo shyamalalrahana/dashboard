@@ -11,6 +11,7 @@ import {
   FlaskConical,
   Package,
   UserCog,
+  ScrollText,
 } from "lucide-react";
 
 import {
@@ -39,11 +40,14 @@ const ops = [
   { title: "Staff", url: "/staff", icon: UserCog },
   { title: "Batches", url: "/batches", icon: FlaskConical },
   { title: "Reports", url: "/reports", icon: FileBarChart },
+  // The audit trail records what staff do, so only the owner sees it.
+  { title: "Activity Log", url: "/activity", icon: ScrollText, adminOnly: true },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ isAdmin = true }: { isAdmin?: boolean }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const opsItems = ops.filter((item) => isAdmin || !("adminOnly" in item && item.adminOnly));
   const isActive = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
 
   return (
@@ -83,7 +87,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Operations</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {ops.map((item) => (
+              {opsItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>

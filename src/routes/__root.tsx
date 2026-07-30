@@ -3,7 +3,9 @@ import {
   Outlet,
   Link,
   createRootRouteWithContext,
+  redirect,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -18,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Toaster } from "@/components/ui/sonner";
+import { UserMenu } from "@/components/user-menu";
+import { fetchCurrentUser, needsSetup } from "@/lib/auth.server";
 
 type Notif = {
   id: string;
@@ -182,7 +186,22 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+// Pages reachable without signing in.
+const PUBLIC_PATHS = new Set(["/login", "/setup"]);
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // Every page is private by default — a new route is protected automatically
+  // rather than needing to remember to guard it.
+  beforeLoad: async ({ location }) => {
+    if (PUBLIC_PATHS.has(location.pathname)) return { user: null };
+
+    const { needsSetup: setupRequired } = await needsSetup();
+    if (setupRequired) throw redirect({ to: "/setup" });
+
+    const user = await fetchCurrentUser();
+    if (!user) throw redirect({ to: "/login" });
+    return { user };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -225,7 +244,18 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient, user } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Login and setup are full-screen pages — no sidebar, header or nav.
+  if (PUBLIC_PATHS.has(pathname)) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -248,6 +278,7 @@ function RootComponent() {
                   <Plus className="h-4 w-4" />
                   New entry
                 </Button>
+                {user && <UserMenu user={user} />}
               </div>
             </header>
             <main className="flex-1">

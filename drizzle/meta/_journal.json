@@ -8,6 +8,13 @@
       "when": 1785443792368,
       "tag": "0000_worthless_nextwave",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785446620730,
+      "tag": "0001_perpetual_virginia_dare",
+      "breakpoints": true
     }
   ]
 }

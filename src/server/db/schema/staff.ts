@@ -25,17 +25,22 @@ export const staff = sqliteTable("staff", {
   mustReset:    bool("must_reset").notNull().default(false),
   lastLoginAt:  integer("last_login_at", { mode: "timestamp" }),
 
+  // Brute-force protection: a short PIN is easy to guess without a lockout.
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil:    integer("locked_until", { mode: "timestamp" }),
+
   createdAt: createdAt(),
 });
 
 // Server-side sessions. Kept in the database rather than only in a signed
 // cookie so an admin can revoke a device immediately (e.g. a lost phone).
 export const sessions = sqliteTable("sessions", {
-  id:        primaryId(),                                  // opaque token stored in the cookie
-  staffId:   text("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
-  userAgent: text("user_agent"),
-  createdAt: createdAt(),
+  id:         primaryId(),                                  // opaque token stored in the cookie
+  staffId:    text("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  expiresAt:  integer("expires_at", { mode: "timestamp" }).notNull(),
+  lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  userAgent:  text("user_agent"),
+  createdAt:  createdAt(),
 });
 
 // Who changed what. Matters once employees handle cash and stock.

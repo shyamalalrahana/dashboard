@@ -3,6 +3,7 @@ import { and, asc, count, eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { optionValues } from "@/server/db/schema/options";
 import { products } from "@/server/db/schema/products";
+import { logActivity, requireAdmin, requireUser } from "@/server/lib/session";
 
 export type OptionKind =
   | "category" | "product_type" | "brand" | "unit"
@@ -31,6 +32,7 @@ const KIND_TO_COLUMN = {
 
 // All active option values, grouped by kind — loaded once per page
 export const fetchAllOptions = createServerFn({ method: "GET" }).handler(async (): Promise<OptionsByKind> => {
+  await requireUser();
   const rows = await db
     .select()
     .from(optionValues)
@@ -54,6 +56,7 @@ export const fetchAllOptions = createServerFn({ method: "GET" }).handler(async (
 export const addOption = createServerFn({ method: "POST" })
   .inputValidator((data: { kind: OptionKind; value: string; meta?: OptionMeta }) => data)
   .handler(async (ctx) => {
+    const user = await requireAdmin();
     const value = ctx.data.value.trim();
     const [inserted] = await db
       .insert(optionValues)
@@ -68,17 +71,24 @@ export const addOption = createServerFn({ method: "POST" })
       .limit(1))[0];
 
     if (!row) return null; // should not happen, but keep the type honest
+    if (inserted) {
+      await logActivity({ staffId: user.id, staffName: user.name, action: "master.add", entity: "option_values", entityId: row.id, detail: { kind: ctx.data.kind, value } });
+    }
     return { id: row.id, kind: row.kind as OptionKind, value: row.value, meta: (row.meta ?? {}) as OptionMeta };
   });
 
 export const renameOption = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string; value: string }) => data)
   .handler(async (ctx) => {
+    const user = await requireAdmin();
     const [row] = await db
       .update(optionValues)
       .set({ value: ctx.data.value.trim() })
       .where(eq(optionValues.id, ctx.data.id))
       .returning();
+    if (row) {
+      await logActivity({ staffId: user.id, staffName: user.name, action: "master.rename", entity: "option_values", entityId: row.id, detail: { kind: row.kind, value: row.value } });
+    }
     return { ok: !!row };
   });
 
@@ -86,6 +96,7 @@ export const renameOption = createServerFn({ method: "POST" })
 export const deleteOption = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async (ctx) => {
+    const user = await requireAdmin();
     const [existing] = await db.select().from(optionValues).where(eq(optionValues.id, ctx.data.id)).limit(1);
     if (!existing) return { ok: true };
 
@@ -98,5 +109,6 @@ export const deleteOption = createServerFn({ method: "POST" })
     }
 
     await db.delete(optionValues).where(eq(optionValues.id, ctx.data.id));
+    await logActivity({ staffId: user.id, staffName: user.name, action: "master.delete", entity: "option_values", entityId: ctx.data.id, detail: { kind: existing.kind, value: existing.value } });
     return { ok: true };
   });

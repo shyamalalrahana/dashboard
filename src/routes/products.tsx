@@ -67,6 +67,10 @@ function fmtDateTime(iso: string) {
 
 function ProductsPage() {
   const loaderData = Route.useLoaderData();
+  // The server already refuses admin-only writes and strips cost prices for
+  // staff; this only keeps the interface honest about what they can do.
+  const { user } = Route.useRouteContext();
+  const isAdmin = user?.role === "admin";
   const [products, setProducts] = useState<Product[]>((loaderData.products as unknown as Product[]) ?? []);
   const [options, setOptions] = useState<MasterOptions>(loaderData.options ?? {});
   const [search, setSearch] = useState("");
@@ -221,9 +225,11 @@ function ProductsPage() {
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openStockIn()}>
             <ArrowUpCircle className="h-4 w-4 text-success" /> Stock In
           </Button>
-          <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4" /> Add Product
-          </Button>
+          {isAdmin && (
+            <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4" /> Add Product
+            </Button>
+          )}
         </div>
       }
     >
@@ -239,10 +245,11 @@ function ProductsPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Inventory value is derived from purchase prices, so it is admin-only. */}
+      <div className={cn("grid grid-cols-1 gap-4", isAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
         <Stat label="Active products" value={`${active.length} SKUs`} icon={<Package className="h-4 w-4" />} />
         <Stat label="Expiring / Expired" value={`${expiring.length} items`} tone="warning" />
-        <Stat label="Inventory value" value={fmtINR(totalValue)} />
+        {isAdmin && <Stat label="Inventory value" value={fmtINR(totalValue)} />}
       </div>
 
       {expiring.length > 0 && (
@@ -379,20 +386,24 @@ function ProductsPage() {
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-success hover:text-success hover:bg-success/10" onClick={() => openStockIn(p.id)}>
                           <ArrowUpCircle className="h-3.5 w-3.5" /> Stock In
                         </Button>
-                        <Button
-                          variant="ghost" size="icon"
-                          className={cn("h-8 w-8", p.offer.enabled && p.offer.value > 0 ? "text-orange-500 hover:text-orange-600" : "text-muted-foreground hover:text-orange-500")}
-                          title="Set offer"
-                          onClick={() => setOfferTargetId(p.id)}
-                        >
-                          <Tag className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(p.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {isAdmin && (
+                          <>
+                            <Button
+                              variant="ghost" size="icon"
+                              className={cn("h-8 w-8", p.offer.enabled && p.offer.value > 0 ? "text-orange-500 hover:text-orange-600" : "text-muted-foreground hover:text-orange-500")}
+                              title="Set offer"
+                              onClick={() => setOfferTargetId(p.id)}
+                            >
+                              <Tag className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Edit" onClick={() => openEdit(p)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" title="Delete" onClick={() => setDeleteId(p.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -424,6 +435,7 @@ function ProductsPage() {
 
       {/* View dialog */}
       <ProductViewDialog
+        isAdmin={isAdmin}
         product={viewItem}
         open={!!viewItem}
         onClose={() => setViewItem(null)}
@@ -532,12 +544,13 @@ function ViewSection({ title, children }: { title: string; children: React.React
   );
 }
 
-function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
+function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer, isAdmin }: {
   product: Product | null;
   open: boolean;
   onClose: () => void;
   onEdit: (p: Product) => void;
   onOffer: (p: Product) => void;
+  isAdmin: boolean;
 }) {
   const exp = p ? expiryStatus(p.expiryDate) : "ok";
   const ep = p ? effectivePrice(p) : 0;
@@ -565,14 +578,16 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
                 )}
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <Button size="sm" variant="outline" onClick={() => onOffer(p)} className="gap-1.5">
-                <Tag className="h-3.5 w-3.5" /> Set Offer
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onEdit(p)} className="gap-1.5">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </Button>
-            </div>
+            {isAdmin && (
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" variant="outline" onClick={() => onOffer(p)} className="gap-1.5">
+                  <Tag className="h-3.5 w-3.5" /> Set Offer
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onEdit(p)} className="gap-1.5">
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -613,13 +628,16 @@ function ProductViewDialog({ product: p, open, onClose, onEdit, onOffer }: {
             <ViewRow label="Pack Size" value={p.packSize ? `${p.packSize} ${p.packUnit}` : undefined} />
           </ViewSection>
 
-          <ViewSection title="Pricing">
-            <ViewRow label="Purchase Price" value={p.costPrice ? fmtINR(p.costPrice) : undefined} />
-            <ViewRow label="Min. Selling Price" value={p.minSellingPrice ? fmtINR(p.minSellingPrice) : undefined} />
-            <ViewRow label="Wholesale Price" value={p.wholesalePrice ? fmtINR(p.wholesalePrice) : undefined} />
-            <ViewRow label="Distributor Price" value={p.distributorPrice ? fmtINR(p.distributorPrice) : undefined} />
-            <ViewRow label="Margin" value={p.costPrice && p.mrp ? `${fmtINR(p.mrp - p.costPrice)} (${((p.mrp - p.costPrice) / p.mrp * 100).toFixed(1)}%)` : undefined} />
-          </ViewSection>
+          {/* Buying prices and margin are commercial secrets — admin only. */}
+          {isAdmin && (
+            <ViewSection title="Pricing">
+              <ViewRow label="Purchase Price" value={p.costPrice ? fmtINR(p.costPrice) : undefined} />
+              <ViewRow label="Min. Selling Price" value={p.minSellingPrice ? fmtINR(p.minSellingPrice) : undefined} />
+              <ViewRow label="Wholesale Price" value={p.wholesalePrice ? fmtINR(p.wholesalePrice) : undefined} />
+              <ViewRow label="Distributor Price" value={p.distributorPrice ? fmtINR(p.distributorPrice) : undefined} />
+              <ViewRow label="Margin" value={p.costPrice && p.mrp ? `${fmtINR(p.mrp - p.costPrice)} (${((p.mrp - p.costPrice) / p.mrp * 100).toFixed(1)}%)` : undefined} />
+            </ViewSection>
+          )}
 
           <ViewSection title="Tax">
             <ViewRow label="Tax" value={p.gstEnabled ? (p.taxProfile || `${p.gstRate}%`) + ` (${p.taxMode})` : "Not applicable"} />

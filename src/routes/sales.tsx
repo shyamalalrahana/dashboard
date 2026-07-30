@@ -154,6 +154,9 @@ function SalesPage() {
   const invoiceCfg  = loadInvoiceSettings();
 
   const { dbSales, dbProducts, loadError } = Route.useLoaderData();
+  // Deleting a sale is admin-only on the server too; this matches the UI to it.
+  const { user } = Route.useRouteContext();
+  const isAdmin = user?.role === "admin";
   const retailProducts = dbProducts;
   const [sales, setSales] = useState<Sale[]>(dbSales as Sale[]);
   const [search, setSearch] = useState("");
@@ -496,13 +499,16 @@ function SalesPage() {
                           >
                             <Printer className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setDeleteId(s.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              title="Delete sale"
+                              onClick={() => setDeleteId(s.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

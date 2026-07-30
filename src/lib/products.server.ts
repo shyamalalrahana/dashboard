@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { products } from "@/server/db/schema/products";
+import { logActivity, requireAdmin, requireUser } from "@/server/lib/session";
 
 export type ProductAttribute = { name: string; value: string };
 export type VariantGroup = { name: string; values: string[] };
@@ -202,33 +203,95 @@ function fromDbRow(r: any): ProductWithId {
   };
 }
 
+/**
+ * What a purchase price reveals is a commercial secret, so buying prices and
+ * margins are removed on the server for counter staff rather than hidden in
+ * the UI — otherwise the numbers still travel to that browser.
+ */
+function redactForStaff(p: ProductWithId): ProductWithId {
+  return { ...p, costPrice: 0, wholesalePrice: 0, distributorPrice: 0, minSellingPrice: 0 };
+}
+
 export const fetchProducts = createServerFn({ method: "GET" })
   .handler(async () => {
+    const user = await requireUser();
     const rows = await db.select().from(products).orderBy(products.createdAt);
-    return rows.map(fromDbRow);
+    const mapped = rows.map(fromDbRow);
+    return user.role === "admin" ? mapped : mapped.map(redactForStaff);
   });
 
 export const createProduct = createServerFn({ method: "POST" })
   .inputValidator((data: ProductInput) => data)
   .handler(async (ctx) => {
+    const user = await requireAdmin();
     const [row] = await db.insert(products).values(toDbRow(ctx.data)).returning();
+    await logActivity({
+      staffId: user.id, staffName: user.name, action: "product.create",
+      entity: "products", entityId: row.id, detail: { name: row.name, sku: row.sku },
+    });
     return fromDbRow(row);
   });
 
 export const updateProduct = createServerFn({ method: "POST" })
   .inputValidator((data: ProductWithId) => data)
   .handler(async (ctx) => {
+    const user = await requireAdmin();
+    const [before] = await db.select().from(products).where(eq(products.id, ctx.data.id)).limit(1);
     const [row] = await db
       .update(products)
       .set({ ...toDbRow(ctx.data), updatedAt: new Date() })
       .where(eq(products.id, ctx.data.id))
       .returning();
+
+    // Price movements are the edits worth being able to look up later.
+    const priceChanged = before && (before.sellingPrice !== row.sellingPrice || before.mrp !== row.mrp);
+    await logActivity({
+      staffId: user.id, staffName: user.name,
+      action: priceChanged ? "product.price_change" : "product.update",
+      entity: "products", entityId: row.id,
+      detail: priceChanged
+        ? { name: row.name, mrp: [before.mrp, row.mrp], sellingPrice: [before.sellingPrice, row.sellingPrice] }
+        : { name: row.name },
+    });
     return fromDbRow(row);
   });
 
 export const deleteProduct = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async (ctx) => {
+    const user = await requireAdmin();
+    const [before] = await db.select().from(products).where(eq(products.id, ctx.data.id)).limit(1);
     await db.delete(products).where(eq(products.id, ctx.data.id));
+    await logActivity({
+      staffId: user.id, staffName: user.name, action: "product.delete",
+      entity: "products", entityId: ctx.data.id, detail: { name: before?.name, sku: before?.sku },
+    });
     return { ok: true };
+  });
+
+/** Stock-in is a counter task, so staff may do it — but every receipt is logged. */
+export const stockIn = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string; quantity: number; reference?: string }) => data)
+  .handler(async (ctx) => {
+    const user = await requireUser();
+    if (!Number.isFinite(ctx.data.quantity) || ctx.data.quantity <= 0) {
+      throw new Error("Enter a quantity greater than zero.");
+    }
+    const [before] = await db.select().from(products).where(eq(products.id, ctx.data.id)).limit(1);
+    if (!before) throw new Error("That product no longer exists.");
+
+    const [row] = await db
+      .update(products)
+      .set({ stock: before.stock + ctx.data.quantity, updatedAt: new Date() })
+      .where(eq(products.id, ctx.data.id))
+      .returning();
+
+    await logActivity({
+      staffId: user.id, staffName: user.name, action: "stock.in",
+      entity: "products", entityId: row.id,
+      detail: { name: row.name, added: ctx.data.quantity, from: before.stock, to: row.stock, reference: ctx.data.reference ?? "" },
+    });
+
+    const mapped = fromDbRow(row);
+    return user.role === "admin" ? mapped : redactForStaff(mapped);
   });

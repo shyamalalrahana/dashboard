@@ -3,6 +3,7 @@ import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { products } from "@/server/db/schema/products";
 import { retailSaleItems, retailSales } from "@/server/db/schema/sales";
+import { logActivity, requireAdmin, requireUser } from "@/server/lib/session";
 
 export type SaleItemInput = {
   productId?: string;
@@ -42,6 +43,7 @@ function toIso(v: unknown): string {
 }
 
 export const fetchSales = createServerFn({ method: "GET" }).handler(async (): Promise<SaleRecord[]> => {
+  await requireUser();
   const sales = await db.select().from(retailSales).orderBy(desc(retailSales.createdAt));
   if (sales.length === 0) return [];
   const items = await db
@@ -78,6 +80,7 @@ export const fetchSales = createServerFn({ method: "GET" }).handler(async (): Pr
 export const createSale = createServerFn({ method: "POST" })
   .inputValidator((data: SaleInput) => data)
   .handler(async (ctx): Promise<SaleRecord> => {
+    const user = await requireUser();
     const data = ctx.data;
 
     // Next sale number from the current max
@@ -89,6 +92,7 @@ export const createSale = createServerFn({ method: "POST" })
 
     const [sale] = await db.insert(retailSales).values({
       saleNumber,
+      soldBy:        user.id,
       customerName:  data.customer || null,
       customerPhone: data.customerPhone || null,
       customerEmail: data.customerEmail || null,
@@ -121,6 +125,12 @@ export const createSale = createServerFn({ method: "POST" })
       }
     }
 
+    await logActivity({
+      staffId: user.id, staffName: user.name, action: "sale.create",
+      entity: "retail_sales", entityId: sale.id,
+      detail: { saleNumber: sale.saleNumber, total: sale.totalAmount, items: data.items.length, payment: data.payment },
+    });
+
     return {
       id: sale.saleNumber,
       dbId: sale.id,
@@ -138,6 +148,9 @@ export const createSale = createServerFn({ method: "POST" })
 export const deleteSale = createServerFn({ method: "POST" })
   .inputValidator((data: { dbId: string; restock: boolean }) => data)
   .handler(async (ctx) => {
+    // Deleting a sale is how takings get hidden — admin only, always logged.
+    const user = await requireAdmin();
+    const [before] = await db.select().from(retailSales).where(eq(retailSales.id, ctx.data.dbId)).limit(1);
     if (ctx.data.restock) {
       const items = await db.select().from(retailSaleItems).where(eq(retailSaleItems.saleId, ctx.data.dbId));
       for (const it of items) {
@@ -149,12 +162,18 @@ export const deleteSale = createServerFn({ method: "POST" })
       }
     }
     await db.delete(retailSales).where(eq(retailSales.id, ctx.data.dbId)); // items cascade
+    await logActivity({
+      staffId: user.id, staffName: user.name, action: "sale.delete",
+      entity: "retail_sales", entityId: ctx.data.dbId,
+      detail: { saleNumber: before?.saleNumber, total: before?.totalAmount, restocked: ctx.data.restock },
+    });
     return { ok: true };
   });
 
 // Product list for the sale form dropdown — includes offer fields so the
 // counter always sells at the product's current effective (discounted) price.
 export const fetchSaleProducts = createServerFn({ method: "GET" }).handler(async () => {
+  await requireUser();
   const rows = await db
     .select({
       id: products.id,

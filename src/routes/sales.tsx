@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   ArrowUpRight,
   Download,
   Mail,
@@ -79,9 +80,19 @@ export const Route = createFileRoute("/sales")({
       { name: "description", content: "Retail counter sales — products sold directly to walk-in customers." },
     ],
   }),
+  // Fail soft: a database problem renders the page with an explanatory banner
+  // instead of throwing, which would surface as a blank platform error page.
   loader: async () => {
-    const [dbSales, dbProducts] = await Promise.all([fetchSales(), fetchSaleProducts()]);
-    return { dbSales, dbProducts };
+    try {
+      const [dbSales, dbProducts] = await Promise.all([fetchSales(), fetchSaleProducts()]);
+      return { dbSales, dbProducts, loadError: null as string | null };
+    } catch (err) {
+      return {
+        dbSales: [] as Awaited<ReturnType<typeof fetchSales>>,
+        dbProducts: [] as Awaited<ReturnType<typeof fetchSaleProducts>>,
+        loadError: err instanceof Error ? err.message : "Could not reach the database.",
+      };
+    }
   },
   component: SalesPage,
 });
@@ -142,7 +153,7 @@ function SalesPage() {
   const bizCfg      = loadBusinessSettings();
   const invoiceCfg  = loadInvoiceSettings();
 
-  const { dbSales, dbProducts } = Route.useLoaderData();
+  const { dbSales, dbProducts, loadError } = Route.useLoaderData();
   const retailProducts = dbProducts;
   const [sales, setSales] = useState<Sale[]>(dbSales as Sale[]);
   const [search, setSearch] = useState("");
@@ -287,6 +298,18 @@ function SalesPage() {
         </>
       }
     >
+      {loadError && (
+        <Card className="border-destructive/40 bg-destructive/10">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+            <div className="text-sm">
+              <p className="font-semibold">Couldn’t load sales from the database</p>
+              <p className="text-muted-foreground">{loadError}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard

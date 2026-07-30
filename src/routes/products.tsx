@@ -40,9 +40,19 @@ export const Route = createFileRoute("/products")({
       { name: "description", content: "Dynamic product master — pricing, stock, variants, and expiry tracking." },
     ],
   }),
+  // Fail soft: a database problem renders the page with an explanatory banner
+  // instead of throwing, which would surface as a blank platform error page.
   loader: async () => {
-    const [products, options] = await Promise.all([fetchProducts(), fetchAllOptions()]);
-    return { products, options };
+    try {
+      const [products, options] = await Promise.all([fetchProducts(), fetchAllOptions()]);
+      return { products, options, loadError: null as string | null };
+    } catch (err) {
+      return {
+        products: [] as Awaited<ReturnType<typeof fetchProducts>>,
+        options: {} as Awaited<ReturnType<typeof fetchAllOptions>>,
+        loadError: err instanceof Error ? err.message : "Could not reach the database.",
+      };
+    }
   },
   component: ProductsPage,
 });
@@ -217,6 +227,18 @@ function ProductsPage() {
         </div>
       }
     >
+      {loaderData.loadError && (
+        <Card className="border-destructive/40 bg-destructive/10">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+            <div className="text-sm">
+              <p className="font-semibold">Couldn’t load products from the database</p>
+              <p className="text-muted-foreground">{loaderData.loadError}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Stat label="Active products" value={`${active.length} SKUs`} icon={<Package className="h-4 w-4" />} />
         <Stat label="Expiring / Expired" value={`${expiring.length} items`} tone="warning" />

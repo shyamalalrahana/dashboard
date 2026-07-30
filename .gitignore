@@ -36,3 +36,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Local database files (never commit business data)
+*.db
+*.db-wal
+*.db-shm

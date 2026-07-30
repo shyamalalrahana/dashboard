@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getSupabaseAdmin } from "@/server/lib/supabase";
-
-// Master data access goes through Supabase's REST API (HTTPS) — see
-// products.server.ts for why raw TCP Postgres is not used here.
+import { and, asc, count, eq } from "drizzle-orm";
+import { db } from "@/server/db";
+import { optionValues } from "@/server/db/schema/options";
+import { products } from "@/server/db/schema/products";
 
 export type OptionKind =
   | "category" | "product_type" | "brand" | "unit"
@@ -20,107 +20,83 @@ export type OptionValue = {
 export type OptionsByKind = Record<string, OptionValue[]>;
 
 // Which products column each option kind is stored against — used to check "in use" before delete.
-const KIND_TO_COLUMN: Record<OptionKind, string> = {
-  category:     "category",
-  product_type: "product_type",
-  brand:        "brand",
-  unit:         "unit",
-  tax_profile:  "tax_profile",
-  warehouse:    "warehouse",
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fromRow(r: any): OptionValue {
-  return { id: r.id, kind: r.kind as OptionKind, value: r.value, meta: (r.meta ?? {}) as OptionMeta };
-}
+const KIND_TO_COLUMN = {
+  category:     products.category,
+  product_type: products.productType,
+  brand:        products.brand,
+  unit:         products.unit,
+  tax_profile:  products.taxProfile,
+  warehouse:    products.warehouse,
+} as const;
 
 // All active option values, grouped by kind — loaded once per page
 export const fetchAllOptions = createServerFn({ method: "GET" }).handler(async (): Promise<OptionsByKind> => {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("option_values")
-    .select("*")
-    .eq("active", true)
-    .order("sort", { ascending: true })
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(`Could not load master data: ${error.message}`);
+  const rows = await db
+    .select()
+    .from(optionValues)
+    .where(eq(optionValues.active, true))
+    .orderBy(asc(optionValues.sort), asc(optionValues.createdAt));
   const grouped: OptionsByKind = {};
-  for (const r of data ?? []) {
-    (grouped[r.kind] ??= []).push(fromRow(r));
+  for (const r of rows) {
+    (grouped[r.kind] ??= []).push({
+      id: r.id,
+      kind: r.kind as OptionKind,
+      value: r.value,
+      meta: (r.meta ?? {}) as OptionMeta,
+    });
   }
   return grouped;
 });
 
 // Always resolves to a real, persisted row — even if the value already exists
 // (e.g. because the client's local option list was stale), so the caller can
-// always select it. Never returns null in practice.
+// always select it.
 export const addOption = createServerFn({ method: "POST" })
   .inputValidator((data: { kind: OptionKind; value: string; meta?: OptionMeta }) => data)
   .handler(async (ctx) => {
-    const supabase = getSupabaseAdmin();
     const value = ctx.data.value.trim();
+    const [inserted] = await db
+      .insert(optionValues)
+      .values({ kind: ctx.data.kind, value, meta: ctx.data.meta ?? {}, sort: 999 })
+      .onConflictDoNothing()
+      .returning();
 
-    const { data: inserted, error: insertError } = await supabase
-      .from("option_values")
-      .upsert(
-        { kind: ctx.data.kind, value, meta: ctx.data.meta ?? {}, sort: 999 },
-        { onConflict: "kind,value", ignoreDuplicates: true },
-      )
-      .select();
-    if (insertError) throw new Error(`Could not add option: ${insertError.message}`);
-    if (inserted && inserted.length > 0) return fromRow(inserted[0]);
+    const row = inserted ?? (await db
+      .select()
+      .from(optionValues)
+      .where(and(eq(optionValues.kind, ctx.data.kind), eq(optionValues.value, value)))
+      .limit(1))[0];
 
-    // Value already existed — fetch and return the existing row.
-    const { data: existing, error: fetchError } = await supabase
-      .from("option_values")
-      .select("*")
-      .eq("kind", ctx.data.kind)
-      .eq("value", value)
-      .limit(1);
-    if (fetchError) throw new Error(`Could not add option: ${fetchError.message}`);
-    return existing && existing.length > 0 ? fromRow(existing[0]) : null;
+    if (!row) return null; // should not happen, but keep the type honest
+    return { id: row.id, kind: row.kind as OptionKind, value: row.value, meta: (row.meta ?? {}) as OptionMeta };
   });
 
 export const renameOption = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string; value: string }) => data)
   .handler(async (ctx) => {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from("option_values")
-      .update({ value: ctx.data.value.trim() })
-      .eq("id", ctx.data.id);
-    if (error) throw new Error(`Could not rename option: ${error.message}`);
-    return { ok: true };
+    const [row] = await db
+      .update(optionValues)
+      .set({ value: ctx.data.value.trim() })
+      .where(eq(optionValues.id, ctx.data.id))
+      .returning();
+    return { ok: !!row };
   });
 
 // Blocks deletion if any product still references this value for its kind.
 export const deleteOption = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async (ctx) => {
-    const supabase = getSupabaseAdmin();
-
-    const { data: existingRows, error: fetchError } = await supabase
-      .from("option_values")
-      .select("*")
-      .eq("id", ctx.data.id)
-      .limit(1);
-    if (fetchError) throw new Error(`Could not delete option: ${fetchError.message}`);
-    const existing = existingRows?.[0];
+    const [existing] = await db.select().from(optionValues).where(eq(optionValues.id, ctx.data.id)).limit(1);
     if (!existing) return { ok: true };
 
     const column = KIND_TO_COLUMN[existing.kind as OptionKind];
     if (column) {
-      const { count, error: countError } = await supabase
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq(column, existing.value);
-      if (countError) throw new Error(`Could not delete option: ${countError.message}`);
-      if ((count ?? 0) > 0) {
-        return { ok: false, inUseCount: count ?? 0, value: existing.value };
+      const [{ value: inUseCount }] = await db.select({ value: count() }).from(products).where(eq(column, existing.value));
+      if (Number(inUseCount) > 0) {
+        return { ok: false, inUseCount: Number(inUseCount), value: existing.value };
       }
     }
 
-    const { error } = await supabase.from("option_values").delete().eq("id", ctx.data.id);
-    if (error) throw new Error(`Could not delete option: ${error.message}`);
+    await db.delete(optionValues).where(eq(optionValues.id, ctx.data.id));
     return { ok: true };
   });

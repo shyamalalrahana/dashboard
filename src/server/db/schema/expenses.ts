@@ -1,7 +1,8 @@
-import { pgTable, text, integer, boolean, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { bool, createdAt, primaryId } from "./_shared";
 
-export const expenses = pgTable("expenses", {
-  id:            uuid("id").primaryKey().defaultRandom(),
+export const expenses = sqliteTable("expenses", {
+  id:            primaryId(),
   expenseNumber: text("expense_number").notNull().unique(),
   category:      text("category").notNull(), // Purchases | Electricity | Salaries | Rent | Transportation | Misc
   note:          text("note"),
@@ -10,6 +11,6 @@ export const expenses = pgTable("expenses", {
   amount:        integer("amount").notNull(),
   status:        text("status").notNull().default("Pending"), // Paid | Pending | Approved | Rejected
   paymentMethod: text("payment_method").notNull().default("Cash"), // Cash | Bank Transfer | UPI | Credit Card | Cheque
-  hasAttachment: boolean("has_attachment").notNull().default(false),
-  createdAt:     timestamp("created_at").defaultNow().notNull(),
+  hasAttachment: bool("has_attachment").notNull().default(false),
+  createdAt:     createdAt(),
 });

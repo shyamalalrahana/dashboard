@@ -1,8 +1,9 @@
-import { pgTable, text, integer, boolean, timestamp, uuid, numeric, jsonb } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { bool, createdAt, primaryId, updatedAt } from "./_shared";
 
-export const products = pgTable("products", {
+export const products = sqliteTable("products", {
   // Identity
-  id:               uuid("id").primaryKey().defaultRandom(),
+  id:               primaryId(),
   sku:              text("sku").notNull().unique(),
   barcode:          text("barcode").default(""),
   name:             text("name").notNull(),
@@ -26,7 +27,7 @@ export const products = pgTable("products", {
   distributorPrice: integer("distributor_price").notNull().default(0),
 
   // Tax
-  gstEnabled:       boolean("gst_enabled").notNull().default(true),
+  gstEnabled:       bool("gst_enabled").notNull().default(true),
   taxMode:          text("tax_mode").notNull().default("Exclusive"), // Inclusive | Exclusive
   gstRate:          text("gst_rate").notNull().default("0"),          // numeric rate as text
   taxProfile:       text("tax_profile").default(""),                  // label from Settings → Tax Profiles
@@ -43,11 +44,11 @@ export const products = pgTable("products", {
   bin:              text("bin").default(""),
 
   // Custom attributes: [{ name, value }]
-  attributes:       jsonb("attributes").default([]),
+  attributes:       text("attributes", { mode: "json" }).$type<unknown[]>().default([]),
 
   // Variants: { groups: [{ name, values: [] }], items: [{ name, sku, price, stock }] }
-  hasVariants:      boolean("has_variants").notNull().default(false),
-  variants:         jsonb("variants").default({}),
+  hasVariants:      bool("has_variants").notNull().default(false),
+  variants:         text("variants", { mode: "json" }).$type<Record<string, unknown>>().default({}),
 
   // Supplier
   supplierName:     text("supplier_name").default(""),
@@ -56,27 +57,27 @@ export const products = pgTable("products", {
   minOrder:         text("min_order").default(""),
 
   // Images: { primary: url, gallery: [urls] }
-  images:           jsonb("images").default({}),
+  images:           text("images", { mode: "json" }).$type<Record<string, unknown>>().default({}),
 
   // Module toggles: { batch, serial, warranty, manufacturing, service }
-  modules:          jsonb("modules").default({}),
+  modules:          text("modules", { mode: "json" }).$type<Record<string, unknown>>().default({}),
   mfgDate:          text("mfg_date").default(""),
   warranty:         text("warranty").default(""),
 
   // Expiry
-  expiryTracking:   boolean("expiry_tracking").notNull().default(false),
+  expiryTracking:   bool("expiry_tracking").notNull().default(false),
   shelfLife:        text("shelf_life").default(""),
   expiryDate:       text("expiry_date").default(""),
 
   // Offer
-  offerEnabled:     boolean("offer_enabled").notNull().default(false),
+  offerEnabled:     bool("offer_enabled").notNull().default(false),
   offerType:        text("offer_type").default("percent"),   // "percent" | "flat"
-  offerValue:       numeric("offer_value", { precision: 10, scale: 2 }).default("0"),
+  offerValue:       real("offer_value").default(0),
   offerLabel:       text("offer_label").default(""),
 
   // Meta
   description:      text("description").default(""),
   notes:            text("notes").default(""),
-  createdAt:        timestamp("created_at").defaultNow().notNull(),
-  updatedAt:        timestamp("updated_at").defaultNow().notNull(),
+  createdAt:        createdAt(),
+  updatedAt:        updatedAt(),
 });
